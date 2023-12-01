@@ -16,8 +16,8 @@ enableEmoji = true
 author = "Minix"
 # license = '<a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA-4.0</a>'
 description = "Maintain by Ho Duy"
-keywords = "blog,redteam,blueteam,ctfplayer"
-info = ["Cyber Security Analyst", "Penetration Tester"]
+keywords = "blog,ctf,blueteam,ctfplayer"
+info = ["Cyber Security Analyst", "Catoholic"]
 avatarURL = "images/avatar.jpg"
 #gravatar = "duyhnk@proton.me"
 dateFormat = "January 2, 2006"
