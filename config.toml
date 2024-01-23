@@ -1,4 +1,4 @@
-baseURL = "http://hackdevbros.com"
+baseURL = "http://minix.io.vn"
 #relativeURLs = false
 title = "H4ck & D3v Br0s"
 theme = "hugo-coder"
@@ -158,7 +158,7 @@ url = "posts/"
 [[languages.en.menu.main]]
 name = "Docs"
 weight = 2
-url = "https://docs.hackdevbros.com"
+url = "https://docs.mini.io.vn"
 
 #[[languages.en.menu.main]]
 #name = "Contact me"
