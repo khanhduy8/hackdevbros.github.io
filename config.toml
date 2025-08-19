@@ -158,7 +158,7 @@ url = "posts/"
 [[languages.en.menu.main]]
 name = "Docs"
 weight = 2
-url = "https://docs.mini.io.vn"
+url = "https://docs.minix.io.vn"
 
 #[[languages.en.menu.main]]
 #name = "Contact me"
@@ -194,3 +194,4 @@ url = "https://docs.mini.io.vn"
 #name = "Contato"
 #weight = 5
 #url = "contact/"
+
