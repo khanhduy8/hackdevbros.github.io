@@ -17,3 +17,24 @@
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="{{ .Title | default .Site.Title }}" />
 <meta name="twitter:description" content="{{ .Description | default .Summary | default .Site.Params.description }}" />
+
+<style>
+figure {
+  margin: 1.5rem auto;
+  text-align: center;
+}
+figure img {
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  display: block;
+  border-radius: 4px;
+}
+figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.88rem;
+  opacity: 0.8;
+  font-style: italic;
+  text-align: center;
+}
+</style>
