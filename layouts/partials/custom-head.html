@@ -6,12 +6,19 @@
 
 {{ if .Params.images }}
   {{ range first 1 .Params.images }}
-    <meta property="og:image" content="{{ . | absURL }}" />
-    <meta name="twitter:image" content="{{ . | absURL }}" />
+    {{ $imgUrl := . | absURL }}
+    {{ with $.Resources.GetMatch . }}
+      {{ $imgUrl = .Permalink }}
+    {{ end }}
+    <meta property="og:image" content="{{ $imgUrl }}" />
+    <meta property="og:image:secure_url" content="{{ $imgUrl }}" />
+    <meta name="twitter:image" content="{{ $imgUrl }}" />
   {{ end }}
 {{ else if .Site.Params.avatarURL }}
-  <meta property="og:image" content="{{ .Site.Params.avatarURL | absURL }}" />
-  <meta name="twitter:image" content="{{ .Site.Params.avatarURL | absURL }}" />
+  {{ $avatarUrl := .Site.Params.avatarURL | absURL }}
+  <meta property="og:image" content="{{ $avatarUrl }}" />
+  <meta property="og:image:secure_url" content="{{ $avatarUrl }}" />
+  <meta name="twitter:image" content="{{ $avatarUrl }}" />
 {{ end }}
 
 <meta name="twitter:card" content="summary_large_image" />
