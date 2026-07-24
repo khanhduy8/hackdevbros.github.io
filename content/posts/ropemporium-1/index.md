@@ -12,11 +12,11 @@ author = "minix"
 
 Trước khi bắt đầu cần lưu ý một số thứ:
 
-- Lab được sử dụng ở đây là x64_86, với các kiến trúc khác việc xây dựng rop gadget sẽ khác nhau
-- Số lượng offset cần để smashstack và ghi đè địa trỉ trở về trong binary x86 là 40, do đó ta sẽ thêm 40 bytes “A” để ghi đè địa chỉ trả về.
+- Lab được sử dụng ở đây là x86_64, với các kiến trúc khác việc xây dựng rop gadget sẽ khác nhau
+- Số lượng offset cần để smash stack và ghi đè địa chỉ trở về trong binary x64 là 40, do đó ta sẽ thêm 40 bytes “A” để ghi đè địa chỉ trả về.
 - Lab cần vô hiệu hóa ASLR, ASLR sẽ khiến cho địa chỉ của binary trong bộ nhớ được phân bổ ngẫu nhiên khiến các địa chỉ trong gadget không chính xác (Cần lỗ hổng để leak base address và cộng thêm vào)
 - Công cụ sử dụng chủ yếu gồm: Ghidra (RE), rabin2, radare2, Ropper, pwndbg.
-- Cấu trúc stack sẽ biễu diễn từ thấp đến cao
+- Cấu trúc stack sẽ biểu diễn từ thấp đến cao
 
 ```text-plain
 [] -> thấp
@@ -28,7 +28,7 @@ pop rdi; sẽ lấy giá trị tại đỉnh stack nơi rsp trỏ vào và giá 
 mov [rsi], rdi; sẽ lấy giá trị rdi lưu vào tại địa chỉ bộ nhớ lưu trong thanh ghi rsi (địa chỉ sẽ dùng [rsi])
 ```
 
-- Khi xây dựng rop gadget riêng với kiến trúc x64 sẽ gặp lỗi segfault dù rằng gadget chain vẫn đúng, điều này là do stack alignment của thư viện glibc (bị tại movaps). Do đó trước khi gặp địa chỉ trả về cần phải align stack trước bằng gadget `ret;` [https://ropemporium.com/guide.html#Common%20pitfalls](https://ropemporium.com/guide.html#Common%20pitfalls)
+- Khi xây dựng rop gadget riêng với kiến trúc x64 sẽ gặp lỗi segfault dù rằng gadget chain vẫn đúng, điều này là do stack alignment của thư viện glibc (xảy ra ở lệnh movaps). Do đó trước khi gặp địa chỉ trả về cần phải align stack trước bằng gadget `ret;` [https://ropemporium.com/guide.html#Common%20pitfalls](https://ropemporium.com/guide.html#Common%20pitfalls)
 - Calling convention x64 khác x86. x64 sẽ lấy argument tại các thanh ghi rdi → arg1, rsi→ arg2, rdx→arg3…., xem tại đây: [http://6.s081.scripts.mit.edu/sp18/x86-64-architecture-guide.html](http://6.s081.scripts.mit.edu/sp18/x86-64-architecture-guide.html)
 - Khi kết thúc một routine (function) hay callee (hàm được gọi) thì sẽ gặp instruction ret, lúc này stack pointer sẽ tăng lên và lấy giá trị trở về tại đỉnh stack chính là hàm caller (hàm gọi), do đó khi ta ghi đè giá trị này thì sẽ kiểm soát được luồng chương trình theo ý muốn.
 
@@ -139,7 +139,7 @@ python3 -c “import sys;sys.stdout.buffer.write(b'A'*40 + b'\x3c\x09\x40\x00' +
 
 ## Split
 
-Challenge 2 hướng dẫn chúng ta truyền string có sẵn trong binary làm argument cho function cho chúng ta sử dụn
+Challenge 2 hướng dẫn chúng ta truyền string có sẵn trong binary làm argument cho function mà chúng ta sử dụng
 
 ![](images/Split/image.png)
 
@@ -189,7 +189,7 @@ python3 -c "import sys;sys.stdout.buffer.write(b'A'*40 + b'\xc3\x07\x40\x00' + b
 
 ## Write4
 
-Challenge 4 sẽ hướng dẫn một kỹ thuật chính là **write-what-where gadgets,** nơi ta sẽ ghi nội dung bất kỳ vào vị trí nào đó trong memory
+Challenge 4 sẽ hướng dẫn một kỹ thuật chính là **write-what-where gadgets**, nơi ta sẽ ghi nội dung bất kỳ vào vị trí nào đó trong memory
 
 Gadget này sẽ có dạng `mov [reg2], reg1` nơi ta sẽ ghi nội dung của thanh ghi reg1 vào địa chỉ lưu trong thanh ghi reg2
 
@@ -221,7 +221,7 @@ $ python3 Ropper.py -f write4
 0x00000000004004e6: ret;
 ```
 
-Sử dụng gadget `pop r14; pop r15; ret;`  sẽ lấy lần lượt vị trí kế trong stack lưu vào r14 (địa chỉ vaddr của .data section vì nó có quyền ghi -rw-) và kế sau lưu vào r15 (chuỗi “flag.txt” vừa đủ 8 byte nên ta không cần thêm)
+Sử dụng gadget `pop r14; pop r15; ret;` sẽ lấy lần lượt vị trí kế tiếp trong stack lưu vào r14 (địa chỉ vaddr của .data section vì nó có quyền ghi -rw-) và kế sau lưu vào r15 (chuỗi “flag.txt” vừa đủ 8 byte nên ta không cần thêm)
 
 Sau đó ta gọi gadget `mov qword ptr [r14], r15; ret;` để lấy giá trị trong r15 lưu tại vị trí tại địa chỉ lưu trong r14 cũng chính là .data section.
 

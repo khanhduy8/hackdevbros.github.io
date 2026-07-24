@@ -155,11 +155,6 @@ name = "Blog"
 weight = 1
 url = "posts/"
 
-[[languages.en.menu.main]]
-name = "Docs"
-weight = 2
-url = "https://docs.minix.io.vn"
-
 #[[languages.en.menu.main]]
 #name = "Contact me"
 #weight = 5

