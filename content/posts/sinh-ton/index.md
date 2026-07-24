@@ -3,6 +3,7 @@ title = "Sinh tồn"
 date = "2026-07-24"
 description = "Sinh tồn"
 author = "minix"
+images = ["images/image.png"]
 +++
 
 Khi đi làm chúng ta thường có xu hướng tin rằng công việc hiện tại của mình là bất biến, sự ổn định là vĩnh viễn và bằng cấp, kỹ năng, mạng lưới quan hệ… là thứ khiến chúng ta khác biệt so với thế giới, ta đồng nhất bản ngã của mình với các giá trị bên ngoài. 

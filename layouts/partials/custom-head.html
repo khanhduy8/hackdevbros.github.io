@@ -1,0 +1,19 @@
+<!-- Open Graph & Social Media Preview Meta Tags -->
+<meta property="og:title" content="{{ if .Title }}{{ .Title }} | {{ .Site.Title }}{{ else }}{{ .Site.Title }}{{ end }}" />
+<meta property="og:description" content="{{ .Description | default .Summary | default .Site.Params.description }}" />
+<meta property="og:type" content="{{ if .IsPage }}article{{ else }}website{{ end }}" />
+<meta property="og:url" content="{{ .Permalink }}" />
+
+{{ if .Params.images }}
+  {{ range first 1 .Params.images }}
+    <meta property="og:image" content="{{ . | absURL }}" />
+    <meta name="twitter:image" content="{{ . | absURL }}" />
+  {{ end }}
+{{ else if .Site.Params.avatarURL }}
+  <meta property="og:image" content="{{ .Site.Params.avatarURL | absURL }}" />
+  <meta name="twitter:image" content="{{ .Site.Params.avatarURL | absURL }}" />
+{{ end }}
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{{ .Title | default .Site.Title }}" />
+<meta name="twitter:description" content="{{ .Description | default .Summary | default .Site.Params.description }}" />

@@ -1,4 +1,4 @@
-baseURL = "http://minix.io.vn"
+baseURL = "https://minix.io.vn/"
 #relativeURLs = false
 title = "H4ck & D3v Br0s"
 theme = "hugo-coder"
